@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import type { Step, UserProfile, College } from "@/types/college"
 import Papa from "papaparse"
+import { useRef } from "react"
 
 interface InitialFormStepProps {
   pageVariants: any
@@ -46,6 +47,8 @@ export default function InitialFormStep({
   setUserProfiles,
   setColleges,
 }: InitialFormStepProps) {
+  const fetchStartTimeRef = useRef<number | null>(null)
+
   // Helper function to convert GBP to INR
   const convertGBPToINR = (gbpAmount: string): string => {
     const exchangeRate = 116.81 // 1 GBP = 116.81 INR (approximate)
@@ -69,67 +72,7 @@ export default function InitialFormStep({
     }
   }
 
-  // Parse CSV data with proper column mapping
-  const parseCSV = (csvText: string): UserProfile[] => {
-    const lines = csvText.trim().split("\n")
-    const headers = lines[0].split(",").map((h) => h.trim())
-  
-    // Optional: log headers to debug mismatches
-    console.log("CSV Headers:", headers)
-  
-    return lines
-      .slice(1)
-      .map((line) => {
-        const values = line.split(",").map((v) => v.trim())
-  
-        const getValue = (columnName: string) => {
-          const index = headers.indexOf(columnName)
-          if (index === -1) {
-            console.warn(`Missing column: ${columnName}`)
-            return ""
-          }
-          return values[index] || ""
-        }
-  
-        const profile: UserProfile = {
-          phoneNumber: getValue("phoneNumber"),
-          name: getValue("name"),
-          email: getValue("email"),
-          collegeName: getValue("Counsellor Recommendation - Pre User → College Name"),
-          courseName: getValue("Counsellor Recommendation - Pre User → Course Name"),
-          country: getValue("Counsellor Recommendation - Pre User → Country"),
-          ieltsBand: getValue("Counsellor Recommendation - Pre User → Ielts Band"),
-          budget: getValue("Pre User Counseling - Pre User → Budget"),
-          courseDuration: getValue("Counsellor Recommendation - Pre User → Duration Of Course"),
-          workExperience: getValue("Total Work Experience"),
-          gapYears: getValue("Gap Years"),
-          preparationStage: getValue("Preparation Stage"),
-          passportStatus: getValue("Passport Status"),
-          currentResidenceState: getValue("Current Residence State"),
-          currentResidenceCity: getValue("Current Residence City"),
-          studentFinance: getValue("Student Finance"),
-          mostImportantCriteria: getValue("Most Important Criteria"),
-          secondImportantCriteria: getValue("Second Important Criteria"),
-          familyIncome: getValue("Family Income (Rs)"),
-          financeMode: getValue("Finance Mode"),
-          campus: getValue("Counsellor Recommendation - Pre User → Campus"),
-          category: getValue("Counsellor Recommendation - Pre User → Category"),
-          preferredIntake: getValue("Counsellor Recommendation - Pre User → Preferred Intake"),
-          currency: getValue("Counsellor Recommendation - Pre User → Currency"),
-          applicationFee: getValue("Counsellor Recommendation - Pre User → Application Fee"),
-          tuitionFee: getValue("Counsellor Recommendation - Pre User → Tuition Fee"),
-          counselingStage: getValue("Pre User Counseling - Pre User → Counseling Stage"),
-          assignedCounsellor: getValue("Pre User Counseling - Pre User → Assigned Counsellor"),
-          welcomeCallDone: getValue("Pre User Counseling - Pre User → Welcome Call Done"),
-        }
-  
-        return profile
-      })
-      .filter((profile) => profile.phoneNumber !== "")
-  }
-  
-
-  // Helper function to parse CSV with proper handling of quoted values
+  // Helper function to parse CSV line handling quoted values
   const parseCSVLine = (line: string): string[] => {
     const result = []
     let current = ""
@@ -188,16 +131,25 @@ export default function InitialFormStep({
       const tuitionCsvUrl =
         "https://docs.google.com/spreadsheets/d/e/2PACX-1vQJN8ViTO5QapqKK8cEXk6fxxIyLAFeZDvwchJRv5mkXxG_1xHIkPq_Fo5je-Nrt4iJYoMV0dYovpjm/pub?output=csv"
 
-      const response = await fetch(tuitionCsvUrl)
+      const response = await fetch(tuitionCsvUrl, {
+        method: 'GET',
+        headers: {
+          'Accept': 'text/csv',
+          'Content-Type': 'text/csv',
+        },
+        mode: 'cors',
+      })
+
       if (!response.ok) {
-        throw new Error("Failed to fetch tuition fee data")
+        throw new Error(`Failed to fetch tuition fee data: ${response.status}`)
       }
+
       const csvText = await response.text()
-      // console.log("Tuition CSV raw data:", csvText.substring(0, 500))
+      console.log("Tuition CSV raw data:", csvText.substring(0, 500))
 
       const lines = csvText.trim().split("\n")
       const headers = parseCSVLine(lines[0])
-      // console.log("Tuition CSV headers:", headers)
+      console.log("Tuition CSV headers:", headers)
 
       const tuitionFees: { [key: string]: string } = {}
 
@@ -206,29 +158,26 @@ export default function InitialFormStep({
         const collegeNameIndex = headers.findIndex((h) => h.toLowerCase().includes("college name"))
         const tuitionFeeIndex = headers.findIndex((h) => h.toLowerCase().includes("tuition fee per year inr"))
 
-        // console.log(`Row ${index + 1}:`, values)
-        // console.log(`College name index: ${collegeNameIndex}, Tuition fee index: ${tuitionFeeIndex}`)
-
         if (collegeNameIndex >= 0 && tuitionFeeIndex >= 0) {
           const collegeName = values[collegeNameIndex]?.trim() || ""
           const tuitionFee = values[tuitionFeeIndex]?.trim() || ""
 
-          // console.log(`College: "${collegeName}", Tuition: "${tuitionFee}"`)
-
           if (collegeName && tuitionFee) {
-            // Clean up the college name for better matching
             const cleanCollegeName = collegeName.toLowerCase().trim()
             tuitionFees[cleanCollegeName] = tuitionFee
-            // Also store with original case
             tuitionFees[collegeName] = tuitionFee
           }
         }
       })
 
-      // console.log("Final tuition fees mapping:", tuitionFees)
+      console.log("Final tuition fees mapping:", tuitionFees)
       return tuitionFees
     } catch (error) {
-      console.error("Error fetching tuition fees:", error)
+      if (error instanceof Error) {
+        console.error("Error fetching tuition fees:", error.message)
+      } else {
+        console.error("Error fetching tuition fees:", error)
+      }
       return {}
     }
   }
@@ -238,23 +187,30 @@ export default function InitialFormStep({
     [key: string]: { accommodation: string; transportation: string; living_expense: string }
   }> => {
     try {
-      // Using a corrected URL - you may need to update this with the correct sheet URL
       const livingCostsUrl =
         "https://docs.google.com/spreadsheets/d/e/2PACX-1vRIiXlBnG9Vh2Gkvwnz4FDwE-aD1gpB3uWNtsUgrk5HV5Jd89KM5V0Jeb0It7867pbGSt8iD-UvmJIE/pub?output=csv"
 
-      const response = await fetch(livingCostsUrl)
+      const response = await fetch(livingCostsUrl, {
+        method: 'GET',
+        headers: {
+          'Accept': 'text/csv',
+          'Content-Type': 'text/csv',
+        },
+        mode: 'cors',
+      })
+
       if (!response.ok) {
-        throw new Error("Failed to fetch living costs data")
+        throw new Error(`Failed to fetch living costs data: ${response.status}`)
       }
+
       const csvText = await response.text()
-      // console.log("Living costs CSV raw data:", csvText.substring(0, 500))
+      console.log("Living costs CSV raw data:", csvText.substring(0, 500))
 
       const lines = csvText.trim().split("\n")
       const headers = parseCSVLine(lines[0])
-      // console.log("Living costs CSV headers:", headers)
+      console.log("Living costs CSV headers:", headers)
 
-      const livingCosts: { [key: string]: { accommodation: string; transportation: string; living_expense: string } } =
-        {}
+      const livingCosts: { [key: string]: { accommodation: string; transportation: string; living_expense: string } } = {}
 
       lines.slice(1).forEach((line, index) => {
         const values = parseCSVLine(line)
@@ -270,7 +226,6 @@ export default function InitialFormStep({
           const living_expense = values[livingExpenseIndex]?.trim() || ""
 
           if (country) {
-            // Convert GBP to INR
             const accommodationINR = accommodation ? convertGBPToINR(accommodation) : "₹47K-68K/month"
             const transportationINR = transportation ? convertGBPToINR(transportation) : "₹10K-16K/month"
             const livingExpenseINR = living_expense ? convertGBPToINR(living_expense) : "₹12.6L/year"
@@ -280,7 +235,6 @@ export default function InitialFormStep({
               transportation: transportationINR,
               living_expense: livingExpenseINR,
             }
-            // Also store with original case
             livingCosts[country] = {
               accommodation: accommodationINR,
               transportation: transportationINR,
@@ -290,10 +244,14 @@ export default function InitialFormStep({
         }
       })
 
-      // console.log("Final living costs mapping:", livingCosts)
+      console.log("Final living costs mapping:", livingCosts)
       return livingCosts
     } catch (error) {
-      console.error("Error fetching living costs:", error)
+      if (error instanceof Error) {
+        console.error("Error fetching living costs:", error.message)
+      } else {
+        console.error("Error fetching living costs:", error)
+      }
       return {}
     }
   }
@@ -306,16 +264,25 @@ export default function InitialFormStep({
       const rankingUrl =
         "https://docs.google.com/spreadsheets/d/e/2PACX-1vRIiXlBnG9Vh2Gkvwnz4FDwE-aD1gpB3uWNtsUgrk5HV5Jd89KM5V0Jeb0It7867pbGSt8iD-UvmJIE/pub?output=csv"
 
-      const response = await fetch(rankingUrl)
+      const response = await fetch(rankingUrl, {
+        method: 'GET',
+        headers: {
+          'Accept': 'text/csv',
+          'Content-Type': 'text/csv',
+        },
+        mode: 'cors',
+      })
+
       if (!response.ok) {
-        throw new Error("Failed to fetch ranking data")
+        throw new Error(`Failed to fetch ranking data: ${response.status}`)
       }
+
       const csvText = await response.text()
-      // console.log("Ranking CSV raw data:", csvText.substring(0, 500))
+      console.log("Ranking CSV raw data:", csvText.substring(0, 500))
 
       const lines = csvText.trim().split("\n")
       const headers = parseCSVLine(lines[0])
-      // console.log("Ranking CSV headers:", headers)
+      console.log("Ranking CSV headers:", headers)
 
       const rankingData: { [key: string]: { rank_value: string; rank_provider_name: string } } = {}
 
@@ -338,7 +305,6 @@ export default function InitialFormStep({
               rank_value: rankValue,
               rank_provider_name: rankProvider,
             }
-            // Also store with original case
             rankingData[collegeName] = {
               rank_value: rankValue,
               rank_provider_name: rankProvider,
@@ -347,10 +313,14 @@ export default function InitialFormStep({
         }
       })
 
-      // console.log("Final ranking data mapping:", rankingData)
+      console.log("Final ranking data mapping:", rankingData)
       return rankingData
     } catch (error) {
-      console.error("Error fetching ranking data:", error)
+      if (error instanceof Error) {
+        console.error("Error fetching ranking data:", error.message)
+      } else {
+        console.error("Error fetching ranking data:", error)
+      }
       return {}
     }
   }
@@ -373,12 +343,12 @@ export default function InitialFormStep({
     // Try partial matching
     for (const [key, value] of Object.entries(tuitionFees)) {
       if (key.toLowerCase().includes(lowerName) || lowerName.includes(key.toLowerCase())) {
-        // console.log(`Found partial match: "${collegeName}" matched with "${key}"`)
+        console.log(`Found partial match: "${collegeName}" matched with "${key}"`)
         return value
       }
     }
 
-    // console.log(`No tuition fee found for college: "${collegeName}"`)
+    console.log(`No tuition fee found for college: "${collegeName}"`)
     return "₹25.0L" // Default fallback
   }
 
@@ -403,50 +373,125 @@ export default function InitialFormStep({
     // Try partial matching
     for (const [key, value] of Object.entries(rankingData)) {
       if (key.toLowerCase().includes(lowerName) || lowerName.includes(key.toLowerCase())) {
-        // console.log(`Found ranking match: "${collegeName}" matched with "${key}"`)
+        console.log(`Found ranking match: "${collegeName}" matched with "${key}"`)
         return value
       }
     }
 
-    // console.log(`No ranking data found for college: "${collegeName}"`)
+    console.log(`No ranking data found for college: "${collegeName}"`)
     return { rank_value: "N/A", rank_provider_name: "N/A" }
   }
 
-  // Fetch user data from Google Sheets CSV
-  
+  // Helper function to normalize phone numbers
+  const normalizePhone = (num: string | number | undefined): string => {
+    return String(num || "").replace(/\D/g, "").trim()
+  }
 
+  // Parse CSV data using Papa Parse for better reliability
+  const parseCSVWithPapaParse = (csvText: string): UserProfile[] => {
+    const parseResult = Papa.parse(csvText, {
+      header: true,
+      skipEmptyLines: true,
+      transformHeader: (header: string) => header.trim(),
+      transform: (value: string) => value.trim(),
+    })
+
+    if (parseResult.errors.length > 0) {
+      console.warn("CSV parsing errors:", parseResult.errors)
+    }
+
+    return (parseResult.data as any[])
+      .map((row: any) => {
+        const profile: UserProfile = {
+          phoneNumber: row["phoneNumber"] || "",
+          name: row["name"] || "",
+          email: row["email"] || "",
+          collegeName: row["Counsellor Recommendation - Pre User → College Name"] || "",
+          courseName: row["Counsellor Recommendation - Pre User → Course Name"] || "",
+          country: row["Counsellor Recommendation - Pre User → Country"] || "",
+          ieltsBand: row["Counsellor Recommendation - Pre User → Ielts Band"] || "",
+          budget: row["Pre User Counseling - Pre User → Budget"] || "",
+          courseDuration: row["Counsellor Recommendation - Pre User → Duration Of Course"] || "",
+          workExperience: row["Total Work Experience"] || "",
+          gapYears: row["Gap Years"] || "",
+          preparationStage: row["Preparation Stage"] || "",
+          passportStatus: row["Passport Status"] || "",
+          currentResidenceState: row["Current Residence State"] || "",
+          currentResidenceCity: row["Current Residence City"] || "",
+          studentFinance: row["Student Finance"] || "",
+          mostImportantCriteria: row["Most Important Criteria"] || "",
+          secondImportantCriteria: row["Second Important Criteria"] || "",
+          familyIncome: row["Family Income (Rs)"] || "",
+          financeMode: row["Finance Mode"] || "",
+          campus: row["Counsellor Recommendation - Pre User → Campus"] || "",
+          category: row["Counsellor Recommendation - Pre User → Category"] || "",
+          preferredIntake: row["Counsellor Recommendation - Pre User → Preferred Intake"] || "",
+          currency: row["Counsellor Recommendation - Pre User → Currency"] || "",
+          applicationFee: row["Counsellor Recommendation - Pre User → Application Fee"] || "",
+          tuitionFee: row["Counsellor Recommendation - Pre User → Tuition Fee"] || "",
+          counselingStage: row["Pre User Counseling - Pre User → Counseling Stage"] || "",
+          assignedCounsellor: row["Pre User Counseling - Pre User → Assigned Counsellor"] || "",
+          welcomeCallDone: row["Pre User Counseling - Pre User → Welcome Call Done"] || "",
+        }
+        return profile
+      })
+      .filter((profile) => profile.phoneNumber !== "")
+  }
+
+  // Main function to fetch user data from Google Sheets CSV
   const fetchUserData = async () => {
+    fetchStartTimeRef.current = Date.now()
     setIsLoading(true)
     setFetchError("")
 
     try {
-      const csvUrl =
-        "https://docs.google.com/spreadsheets/d/e/2PACX-1vTRHmfpuqbSNh5d_U9_CvB7v0QDDYJ6fcT9f5Rjm15UY53AxJNkXM6Xl_oqk9n8jb2vEpb697O7aLYM/pub?output=csv"
+      // Updated CSV URL as provided
+      const csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRQtjtY6NkC6LSKa_vEVbwjfoMVUnkGpZp0Q1mpmtJEDx-KXgBLGlmTTOin-VB6ycISSIaISUVOcKin/pub?output=csv"
 
-      // Fetch all four datasets
+      console.log("Fetching from URL:", csvUrl)
+
+      // Fetch all four datasets in parallel
       const [profileResponse, tuitionFees, livingCosts, rankingData] = await Promise.all([
-        fetch(csvUrl),
+        fetch(csvUrl, {
+          method: 'GET',
+          headers: {
+            'Accept': 'text/csv',
+            'Content-Type': 'text/csv',
+          },
+          mode: 'cors',
+        }),
         fetchTuitionFees(),
         fetchLivingCosts(),
         fetchRankingData(),
       ])
 
+      console.log("Profile response status:", profileResponse.status)
+      console.log("Profile response headers:", profileResponse.headers)
+
       if (!profileResponse.ok) {
-        throw new Error("Failed to fetch data from Google Sheets")
+        throw new Error(`HTTP error! status: ${profileResponse.status}`)
       }
+
       const csvText = await profileResponse.text()
+      console.log("CSV text length:", csvText.length)
+      console.log("First 200 characters:", csvText.substring(0, 200))
 
-      const profiles = parseCSV(csvText)
-      // console.log("Parsed profiles:", profiles)
-      // console.log("CSV Headers:", csvText.split("\n")[0])
-      // console.log("Tuition Fees:", tuitionFees)
-      // console.log("Living Costs:", livingCosts)
-      // console.log("Ranking Data:", rankingData)
+      // Check if we actually got CSV data
+      if (!csvText || csvText.trim().length === 0) {
+        throw new Error("Empty response from Google Sheets")
+      }
+
+      // Check if response looks like HTML (error page)
+      if (csvText.trim().startsWith('<!DOCTYPE') || csvText.trim().startsWith('<html')) {
+        throw new Error("Received HTML instead of CSV - check if sheet is public")
+      }
+
+      // Parse CSV using Papa Parse
+      const profiles = parseCSVWithPapaParse(csvText)
+      console.log("Parsed profiles count:", profiles.length)
+      console.log("First few profiles:", profiles.slice(0, 3))
+
       setUserProfiles(profiles)
-
-      // Find all entries for this phone number
-      // Helper function to clean phone numbers
-      const normalizePhone = (num) => String(num || "").replace(/\D/g, "").trim()
 
       // Debug logs
       console.log("Normalized input phone:", normalizePhone(formData.phoneNumber))
@@ -457,6 +502,7 @@ export default function InitialFormStep({
         (profile) => normalizePhone(profile.phoneNumber) === normalizePhone(formData.phoneNumber)
       )
 
+      console.log("Found user entries:", userEntries.length)
 
       if (userEntries.length > 0) {
         // If multiple entries exist, store them for selection
@@ -466,6 +512,7 @@ export default function InitialFormStep({
 
         // Use the first entry
         const selectedProfile = userEntries[0]
+        console.log("Selected profile:", selectedProfile)
 
         // Map the profile data to form data
         setFormData((prev: any) => ({
@@ -513,12 +560,12 @@ export default function InitialFormStep({
             }
             const collegeRankingData = findRankingData(collegeName, rankingData)
 
-            // console.log(
-            //   `Generating college: "${collegeName}" with tuition fee: "${tuitionFeeFromSheet}", living costs:`,
-            //   countryLivingCosts,
-            //   "and ranking data:",
-            //   collegeRankingData,
-            // )
+            console.log(
+              `Generating college: "${collegeName}" with tuition fee: "${tuitionFeeFromSheet}", living costs:`,
+              countryLivingCosts,
+              "and ranking data:",
+              collegeRankingData,
+            )
 
             return {
               id: `user-${index}`,
@@ -531,7 +578,7 @@ export default function InitialFormStep({
               roi: "120%",
               tags: [entry.category || "Recommended", entry.campus || "Main Campus"],
               admissionsOpen: true,
-              liked: false, // Always false, do not pre-like any
+              liked: false,
               color: getCollegeColor(index),
               courseName: entry.courseName,
               campus: entry.campus,
@@ -540,21 +587,32 @@ export default function InitialFormStep({
               rankingData: collegeRankingData,
             }
           })
-          .filter((college) => college.name && college.name !== "University 1") // Filter out empty names
+          .filter((college) => college.name && college.name !== "University 1")
 
-        // console.log("Generated colleges:", generatedColleges)
+        console.log("Generated colleges:", generatedColleges)
 
         if (generatedColleges.length > 0) {
           setColleges(generatedColleges)
         }
 
+        setProfileFetched(true)
         // Automatically proceed to results step
         onNext("results")
       } else {
-        setFetchError("No profile found for this phone number. Please check and try again.")
+        // If fetch was very recent, show 'Loading' instead of not found
+        const now = Date.now()
+        if (fetchStartTimeRef.current && now - fetchStartTimeRef.current < 10000) {
+          setFetchError("")
+        } else {
+          setFetchError("No profile found for this phone number. Please check and try again.")
+        }
       }
     } catch (error) {
-      console.error("Error fetching user data:", error)
+      if (error instanceof Error) {
+        console.error("Unable to fetch profile data:", error.message)
+      } else {
+        console.error("Unable to fetch profile data:", error)
+      }
       setFetchError("Unable to fetch profile data. Please check if the sheet is publicly accessible.")
     } finally {
       setIsLoading(false)
@@ -568,7 +626,7 @@ export default function InitialFormStep({
       exit="out"
       variants={pageVariants}
       transition={pageTransition}
-      className="max-w-4xl mx-auto"
+      className="max-w-full sm:max-w-4xl mx-auto px-2 sm:px-0"
     >
       <div className="mb-12">
         <Button
@@ -597,7 +655,7 @@ export default function InitialFormStep({
       </div>
 
       {!profileFetched ? (
-        <Card className="p-6 md:p-8 bg-white/80 backdrop-blur-sm border-0 shadow-xl hover:shadow-2xl transition-all duration-500 rounded-2xl">
+        <Card className="p-4 sm:p-6 md:p-8 bg-white/80 backdrop-blur-sm border-0 shadow-xl hover:shadow-2xl transition-all duration-500 rounded-2xl w-full">
           <div className="text-center mb-8">
             <h2 className="text-xl md:text-2xl font-bold bg-gradient-to-r from-gray-900 to-pink-600 bg-clip-text text-transparent mb-2">
               {"Let's Get Started"}
@@ -623,6 +681,18 @@ export default function InitialFormStep({
               />
             </motion.div>
 
+            {isLoading && !fetchError && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <Alert className="border-blue-200 bg-blue-50">
+                  <Loader2 className="h-4 w-4 text-blue-600 animate-spin" />
+                  <AlertDescription className="text-blue-700">Loading...</AlertDescription>
+                </Alert>
+              </motion.div>
+            )}
             {fetchError && (
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
@@ -659,6 +729,8 @@ export default function InitialFormStep({
                 )}
               </Button>
             </motion.div>
+
+            
 
             {/* Info about data source */}
             <motion.div

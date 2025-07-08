@@ -326,7 +326,7 @@ export default function ResultsStep({
         transition={pageTransition}
         className="space-y-6"
       >
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col sm:flex-row items-center justify-between mb-6 gap-4 sm:gap-0">
           <Button
             variant="ghost"
             onClick={onBack}
@@ -370,7 +370,7 @@ export default function ResultsStep({
           </div>
         </div>
 
-        <div className="text-center mb-8">
+        <div className="text-center mb-8 px-2 sm:px-0">
           <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">College Recommendations for {name}</h1>
           <p className="text-base text-gray-600 max-w-2xl mx-auto">
             Based on your counseling profile and {intendedMajor} preferences for {country}
@@ -392,7 +392,7 @@ export default function ResultsStep({
                     : "border-gray-200 bg-white/80 hover:border-gray-300"
                 } backdrop-blur-sm rounded-2xl relative overflow-hidden`}
               >
-                <div className="flex flex-col lg:flex-row gap-6">
+                <div className="flex flex-col lg:flex-row gap-4 sm:gap-6 w-full">
                   {/* Left Section - College Info */}
                   <div className="flex-1">
                     <div className="flex items-start gap-4 mb-4">

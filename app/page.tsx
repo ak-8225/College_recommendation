@@ -8,9 +8,7 @@ import ProfileFormStep from "@/components/steps/profile-form-step"
 import ResultsStep from "@/components/steps/results-step"
 import ComparisonStep from "@/components/steps/comparison-step"
 import SummaryStep from "@/components/steps/summary-step"
-import type { College, UserProfile } from "@/types/college"
-
-type Step = "welcome" | "initial-form" | "profile-form" | "results" | "summary" | "comparison"
+import type { College, UserProfile, Step } from "@/types/college"
 
 const mockColleges: College[] = [
   {
@@ -100,13 +98,91 @@ export default function CollegeFitApp() {
   const [selectedForComparison, setSelectedForComparison] = useState<string[]>([])
 
   const handleNext = (step: Step) => {
+    if (step === 'initial-form') {
+      setFormData({
+        phoneNumber: "",
+        topPriority: "",
+        name: "",
+        email: "",
+        collegeName: "",
+        courseName: "",
+        country: "",
+        ieltsBand: "",
+        budget: "",
+        courseDuration: "",
+        workExperience: "",
+        gapYears: "",
+        preparationStage: "",
+        passportStatus: "",
+        currentResidenceState: "",
+        currentResidenceCity: "",
+        studentFinance: "",
+        mostImportantCriteria: "",
+        secondImportantCriteria: "",
+        familyIncome: "",
+        financeMode: "",
+        campus: "",
+        category: "",
+        preferredIntake: "",
+        currency: "",
+        applicationFee: "",
+        tuitionFee: "",
+        counselingStage: "",
+        assignedCounsellor: "",
+        welcomeCallDone: "",
+      })
+      setProfileFetched(false)
+      setMultipleEntries([])
+      setUserProfiles([])
+      setSelectedForComparison([])
+      setColleges(mockColleges)
+    }
     setCurrentStep(step)
   }
 
   const handleBack = () => {
     const stepOrder: Step[] = ["welcome", "initial-form", "results", "comparison", "summary"]
     const currentIndex = stepOrder.indexOf(currentStep)
-    if (currentIndex > 0) {
+    if (currentStep === "results") {
+      setFormData({
+        phoneNumber: "",
+        topPriority: "",
+        name: "",
+        email: "",
+        collegeName: "",
+        courseName: "",
+        country: "",
+        ieltsBand: "",
+        budget: "",
+        courseDuration: "",
+        workExperience: "",
+        gapYears: "",
+        preparationStage: "",
+        passportStatus: "",
+        currentResidenceState: "",
+        currentResidenceCity: "",
+        studentFinance: "",
+        mostImportantCriteria: "",
+        secondImportantCriteria: "",
+        familyIncome: "",
+        financeMode: "",
+        campus: "",
+        category: "",
+        preferredIntake: "",
+        currency: "",
+        applicationFee: "",
+        tuitionFee: "",
+        counselingStage: "",
+        assignedCounsellor: "",
+        welcomeCallDone: "",
+      })
+      setProfileFetched(false)
+      setMultipleEntries([])
+      setUserProfiles([])
+      setSelectedForComparison([])
+      setColleges(mockColleges)
+      setCurrentStep("initial-form")
+    } else if (currentIndex > 0) {
       setCurrentStep(stepOrder[currentIndex - 1])
     }
   }
@@ -125,7 +201,7 @@ export default function CollegeFitApp() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
-      <div className="container mx-auto px-4 py-6 max-w-6xl">
+      <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-6 max-w-full sm:max-w-6xl w-full">
         <AnimatePresence mode="wait">
           {currentStep === "welcome" && (
             <WelcomeStep

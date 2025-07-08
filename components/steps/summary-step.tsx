@@ -93,7 +93,6 @@ const generatePDF = async (formData: any, elementRef: React.RefObject<HTMLDivEle
       subject: "College Fit Analysis Report",
       author: "College Fit App",
       creator: "College Fit Analysis Tool",
-      producer: "College Fit App",
     })
 
     // Download the PDF
@@ -156,7 +155,7 @@ export default function SummaryStep({
   onBack,
 }: SummaryStepProps) {
   const [shareUrl, setShareUrl] = useState<string>("")
-  const summaryRef = useRef<HTMLDivElement>(null)
+  const summaryRef = useRef<HTMLDivElement>(null) as React.RefObject<HTMLDivElement>
 
   // Get liked colleges
   const likedColleges = colleges.filter((college) => college.liked)
@@ -278,7 +277,7 @@ export default function SummaryStep({
   return (
     <TooltipProvider>
       {/* Header - Outside of PDF capture */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col sm:flex-row items-center justify-between mb-8 gap-4 sm:gap-0 px-2 sm:px-0">
         <Button
           variant="ghost"
           onClick={onBack}
@@ -313,7 +312,7 @@ export default function SummaryStep({
         exit="out"
         variants={pageVariants}
         transition={pageTransition}
-        className="space-y-8"
+        className="space-y-8 px-2 sm:px-0"
       >
         {/* Title Section */}
         <div className="text-center mb-8">
@@ -332,7 +331,7 @@ export default function SummaryStep({
               <Heart className="w-6 h-6 text-red-500 fill-current" />
               Your Favorite Universities
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 w-full">
               {likedColleges.map((college, index) => (
                 <Card
                   key={college.id}
