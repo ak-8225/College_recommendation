@@ -15,103 +15,80 @@ import type { Step, College } from "@/types/college"
 
 import { useState, useRef } from "react"
 import { toast } from "@/hooks/use-toast"
+import LeapStyleSummaryPDF from "./LeapStyleSummaryPDF";
 
-// Enhanced PDF generation with visual elements
-const generatePDF = async (formData: any, elementRef: React.RefObject<HTMLDivElement>) => {
-  try {
-    // Dynamic import to avoid SSR issues
-    const html2canvas = (await import("html2canvas")).default
-    const jsPDF = (await import("jspdf")).default
+// Replace the generatePDF function to render LeapStyleSummaryPDF to a hidden div, capture it, and export as PDF
+const generatePDF = async (formData: any, colleges: any, summaryRef: React.RefObject<HTMLDivElement>) => {
+  const html2canvas = (await import("html2canvas")).default;
+  const jsPDF = (await import("jspdf")).default;
 
-    if (!elementRef.current) {
-      toast({
-        title: "Error",
-        description: "Unable to generate PDF. Please try again.",
-        variant: "destructive",
-      })
-      return
-    }
+  // Prepare data for LeapStyleSummaryPDF
+  const likedColleges = colleges.filter((c: any) => c.liked).slice(0, 4);
+  const meetingDate = new Date().toLocaleDateString();
+  const counselor = { name: "Ujjbal Sharma", title: "Leap Scholar Counselor", phone: "6364467022" };
+  const student = { name: formData.name, status: `Aspiring Undergraduate – ${formData.intake || "Fall 2025"}` };
+  const purpose = `Discussed profile, goals, recommended college fit, and action plan for ${formData.courseName} in ${formData.country}.`;
+  const shortlistedColleges = likedColleges;
+  const fitSummary = { roi: "High", acceptance: "80%", peer: "₹30L avg salary", fitTag: "Good Match" };
+  const challenges = ["Late application timing", "Backlogs may limit options"];
+  const conclusion = "Focus will be on 2–3 viable institutions.";
+  const timeline = { urgency: "Submit by April 15 to stay eligible", strategy: "Apply to all shortlisted universities promptly." };
+  const insights = [
+    { label: "Act Fast", value: "Time is limited for this intake. Apply ASAP." },
+    { label: "Apply Broadly", value: "Maximize chances by applying to all suitable options." },
+    { label: "Financial Tips", value: "Show a mix of loan and savings for visa." },
+    { label: "Application Notes", value: "Don’t wait for test scores to apply." },
+  ];
+  const financial = { tuition: "₹15–20L", living: "₹11L/year", total: "₹30–35L", funding: "Loan + Parent Savings" };
+  const roiData = likedColleges.map((c: any, i: number) => ({ name: c.name, roi: (3.2 + i * 0.3) }));
+  const usps = likedColleges.flatMap((c: any) => (Array.isArray(c.usps) ? c.usps : [])).slice(0, 8);
+  const relationshipManager = { name: "Relationship Manager", phone: "7204327470" };
 
-    // Show loading toast
-    toast({
-      title: "Generating PDF",
-      description: "Please wait while we create your visual report...",
-    })
-
-    // Configure html2canvas options for better quality
-    const canvas = await html2canvas(elementRef.current, {
-      scale: 2, // Higher resolution
-      useCORS: true,
-      allowTaint: true,
-      backgroundColor: "#ffffff",
-      width: elementRef.current.scrollWidth,
-      height: elementRef.current.scrollHeight,
-      scrollX: 0,
-      scrollY: 0,
-    })
-
-    const imgData = canvas.toDataURL("image/png")
-
-    // Create PDF with proper dimensions
-    const pdf = new jsPDF({
-      orientation: "portrait",
-      unit: "mm",
-      format: "a4",
-    })
-
-    const pdfWidth = pdf.internal.pageSize.getWidth()
-    const pdfHeight = pdf.internal.pageSize.getHeight()
-    const imgWidth = canvas.width
-    const imgHeight = canvas.height
-
-    // Calculate scaling to fit page
-    const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight)
-    const scaledWidth = imgWidth * ratio
-    const scaledHeight = imgHeight * ratio
-
-    // Center the image on the page
-    const x = (pdfWidth - scaledWidth) / 2
-    const y = (pdfHeight - scaledHeight) / 2
-
-    // Add the image to PDF
-    pdf.addImage(imgData, "PNG", x, y, scaledWidth, scaledHeight)
-
-    // If content is too long, add multiple pages
-    if (scaledHeight > pdfHeight) {
-      const totalPages = Math.ceil(scaledHeight / pdfHeight)
-
-      for (let i = 1; i < totalPages; i++) {
-        pdf.addPage()
-        const yOffset = -i * pdfHeight
-        pdf.addImage(imgData, "PNG", x, yOffset, scaledWidth, scaledHeight)
-      }
-    }
-
-    // Add metadata
-    pdf.setProperties({
-      title: `College Fit Analysis - ${formData.name || "Student"}`,
-      subject: "College Fit Analysis Report",
-      author: "College Fit App",
-      creator: "College Fit Analysis Tool",
-    })
-
-    // Download the PDF
-    const fileName = `College_Fit_Analysis_${formData.name || "Report"}_${new Date().toISOString().split("T")[0]}.pdf`
-    pdf.save(fileName)
-
-    toast({
-      title: "PDF Downloaded Successfully",
-      description: "Your complete visual analysis report has been downloaded.",
-    })
-  } catch (error) {
-    console.error("PDF generation error:", error)
-    toast({
-      title: "PDF Generation Failed",
-      description: "There was an error generating the PDF. Please try again.",
-      variant: "destructive",
-    })
-  }
-}
+  // Render LeapStyleSummaryPDF to a hidden div
+  const container = document.createElement("div");
+  container.style.position = "fixed";
+  container.style.left = "-9999px";
+  document.body.appendChild(container);
+  import("react-dom/client").then((ReactDOMClient) => {
+    const root = ReactDOMClient.createRoot(container);
+    root.render(
+      <LeapStyleSummaryPDF
+        meetingDate={meetingDate}
+        counselor={counselor}
+        student={student}
+        purpose={purpose}
+        shortlistedColleges={shortlistedColleges}
+        fitSummary={fitSummary}
+        challenges={challenges}
+        conclusion={conclusion}
+        timeline={timeline}
+        insights={insights}
+        financial={financial}
+        roiData={roiData}
+        usps={usps}
+        relationshipManager={relationshipManager}
+      />
+    );
+    setTimeout(async () => {
+      const canvas = await html2canvas(container.firstChild as HTMLElement, { scale: 2, useCORS: true, backgroundColor: "#fff" });
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const imgWidth = canvas.width;
+      const imgHeight = canvas.height;
+      const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
+      const scaledWidth = imgWidth * ratio;
+      const scaledHeight = imgHeight * ratio;
+      const x = (pdfWidth - scaledWidth) / 2;
+      const y = (pdfHeight - scaledHeight) / 2;
+      pdf.addImage(imgData, "PNG", x, y, scaledWidth, scaledHeight);
+      pdf.save(`College_Fit_Summary_${formData.name || "Report"}_${new Date().toISOString().split("T")[0]}.pdf`);
+      root.unmount();
+      document.body.removeChild(container);
+    }, 100);
+  });
+};
 
 // Helper function to generate shareable link
 const generateShareableLink = () => {
@@ -136,6 +113,140 @@ const copyToClipboard = async (text: string) => {
     })
   }
 }
+
+// Add getCollegeDetails function from results-step.tsx
+const getCollegeDetails = (college: College) => {
+  const livingCosts = college.livingCosts || {
+    accommodation: "₹54,947-79,431/month",
+    transportation: "₹11,681-18,689/month",
+    living_expense: "₹14.7L/year",
+  };
+  const rankingData = college.rankingData || {
+    rank_value: "N/A",
+    rank_provider_name: "N/A",
+  };
+  // For now, just use tags as USPs if available
+  const collegeUSPs = college.tags || [];
+  const details: any = {
+    "1": {
+      qsRanking:
+        rankingData.rank_value !== "N/A"
+          ? `${rankingData.rank_value} (${rankingData.rank_provider_name})`
+          : "801-1000",
+      tuitionFees: college.tuitionFee || "₹17.5L/year",
+      livingCosts: livingCosts.living_expense,
+      accommodation: "₹54,947-79,431/month",
+      transportation: "₹11,681-18,689/month",
+      scholarships: "Varies",
+      employmentRate: "78%",
+      averageSalary: "₹25.2L",
+      campusSize: "20,000 students",
+      internationalStudents: "20%",
+      campusRating: "3.5/5",
+      facilities: ["Library", "Sports Centre", "Labs"],
+      programs: ["MSc Data Science", "MSc Robotics", "MSc AI"],
+      accreditation: "N/A",
+      location: "Salford, Greater Manchester",
+      transport: "Good public transport",
+      accommodationInfo: "On-campus options",
+      support: "Student support services",
+      bulletPoints: collegeUSPs,
+      sources: {
+        qsRanking: "Source: QS World University Rankings 2024",
+        tuitionFees: "Source: University of Salford Website 2024",
+        employmentRate: "Source: HESA Graduate Outcomes Survey 2023",
+      },
+    },
+    "2": {
+      qsRanking:
+        rankingData.rank_value !== "N/A"
+          ? `${rankingData.rank_value} (${rankingData.rank_provider_name})`
+          : "531-540",
+      tuitionFees: college.tuitionFee || "₹18.1L/year",
+      livingCosts: livingCosts.living_expense,
+      accommodation: "₹54,947-79,431/month",
+      transportation: "₹11,681-18,689/month",
+      scholarships: "Available",
+      employmentRate: "82%",
+      averageSalary: "₹26.8L",
+      campusSize: "30,000 students",
+      internationalStudents: "25%",
+      campusRating: "4.0/5",
+      facilities: ["Library", "Sports Centre", "Labs"],
+      programs: ["MSc Cyber Security", "MSc Engineering", "MSc Finance"],
+      accreditation: "N/A",
+      location: "Coventry, West Midlands",
+      transport: "Excellent transport links",
+      accommodationInfo: "Varied options",
+      support: "International student support",
+      bulletPoints: collegeUSPs,
+      sources: {
+        qsRanking: "Source: QS World University Rankings 2024",
+        tuitionFees: "Source: Coventry University Website 2024",
+        employmentRate: "Source: HESA Graduate Outcomes Survey 2023",
+      },
+    },
+    "3": {
+      qsRanking:
+        rankingData.rank_value !== "N/A" ? `${rankingData.rank_value} (${rankingData.rank_provider_name})` : "326",
+      tuitionFees: college.tuitionFee || "₹22.6L/year",
+      livingCosts: livingCosts.living_expense,
+      accommodation: "₹54,947-79,431/month",
+      transportation: "₹11,681-18,689/month",
+      scholarships: "Merit-based",
+      employmentRate: "85%",
+      averageSalary: "₹28.4L",
+      campusSize: "15,000 students",
+      internationalStudents: "30%",
+      campusRating: "4.2/5",
+      facilities: ["Library", "Sports Centre", "Labs"],
+      programs: ["MSc Medicine", "MSc Law", "MSc Business"],
+      accreditation: "N/A",
+      location: "Dundee, Scotland",
+      transport: "Good public transport",
+      accommodationInfo: "Guaranteed for intl.",
+      support: "Dedicated support team",
+      bulletPoints: collegeUSPs,
+      sources: {
+        qsRanking: "Source: QS World University Rankings 2024",
+        tuitionFees: "Source: University of Dundee Website 2024",
+        employmentRate: "Source: HESA Graduate Outcomes Survey 2023",
+      },
+    },
+  };
+  if (!details[college.id as keyof typeof details]) {
+    return {
+      qsRanking:
+        rankingData.rank_value !== "N/A"
+          ? `${rankingData.rank_value} (${rankingData.rank_provider_name})`
+          : "N/A",
+      tuitionFees: college.tuitionFee || "₹25.0L",
+      livingCosts: livingCosts.living_expense,
+      accommodation: livingCosts.accommodation,
+      transportation: livingCosts.transportation,
+      scholarships: "Available",
+      employmentRate: "80%",
+      averageSalary: "₹26.3L",
+      campusSize: "25,000 students",
+      internationalStudents: "25%",
+      campusRating: "4.0/5",
+      facilities: ["Library", "Sports Centre", "Labs"],
+      programs: [college.courseName || "Various Programs"],
+      accreditation: "N/A",
+      location: college.country || "Unknown",
+      transport: "Good public transport",
+      accommodationInfo: "Available",
+      support: "Student support services",
+      bulletPoints: collegeUSPs,
+      sources: {
+        qsRanking: "Source: University Rankings 2024",
+        tuitionFees: "Source: University Website 2024",
+        employmentRate: "Source: Graduate Outcomes Survey 2023",
+      },
+    };
+  }
+  return details[college.id as keyof typeof details];
+};
 
 interface SummaryStepProps {
   pageVariants: any
@@ -290,7 +401,7 @@ export default function SummaryStep({
           {/* Download PDF Button */}
           <Button
             className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
-            onClick={() => generatePDF(formData, summaryRef)}
+            onClick={() => generatePDF(formData, colleges, summaryRef)}
           >
             <Download className="w-4 h-4 mr-2" />
             Download PDF
@@ -332,67 +443,62 @@ export default function SummaryStep({
               Your Favorite Universities
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 w-full">
-              {likedColleges.map((college, index) => (
-                <Card
-                  key={college.id}
-                  className="p-6 bg-white border-gray-200 shadow-xl rounded-2xl hover:shadow-2xl transition-all duration-300 hover:scale-105"
-                >
-                  <div className="flex items-center gap-4 mb-6">
-                    <div
-                      className={`w-12 h-12 bg-gradient-to-br ${college.color} rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg`}
-                    >
-                      {college.name.charAt(0)}
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-bold text-gray-900 text-lg leading-tight">{college.name}</h3>
-                      <p className="text-sm text-gray-600 flex items-center gap-1">
-                        {college.flag} {college.country}
-                      </p>
-                    </div>
-                    <Heart className="w-6 h-6 text-red-500 fill-current" />
-                  </div>
-
-                  <div className="space-y-4">
-                    <div>
-                      <div className="flex justify-between text-sm mb-2">
-                        <span className="text-gray-700">Break-even Time</span>
-                        <span className="font-semibold text-gray-900">{3.2 + index * 0.3} Years</span>
+              {likedColleges.map((college, index) => {
+                const details = getCollegeDetails(college);
+                return (
+                  <Card
+                    key={college.id}
+                    className="p-6 bg-white border-gray-200 shadow-xl rounded-2xl hover:shadow-2xl transition-all duration-300 hover:scale-105"
+                  >
+                    <div className="flex items-center gap-4 mb-6">
+                      <div
+                        className={`w-12 h-12 bg-gradient-to-br ${college.color} rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg`}
+                      >
+                        {college.name.charAt(0)}
                       </div>
-                      <Progress value={Math.max(0, 100 - (3.2 + index * 0.3) * 25)} className="h-3" />
+                      <div className="flex-1">
+                        <h3 className="font-bold text-gray-900 text-lg leading-tight">{college.name}</h3>
+                        <p className="text-sm text-gray-600 flex items-center gap-1">
+                          {college.flag} {college.country}
+                        </p>
+                      </div>
+                      <Heart className="w-6 h-6 text-red-500 fill-current" />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-200">
-                      <div>
-                        <p className="text-xs text-gray-600 mb-1">Tuition Fee</p>
-                        <p className="font-semibold text-gray-900 text-sm">{college.tuitionFee}</p>
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-200">
+                        <div>
+                          <p className="text-xs text-gray-600 mb-1">Tuition Fee</p>
+                          <p className="font-semibold text-gray-900 text-sm">{details.tuitionFees}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-600 mb-1">Avg Package</p>
+                          <p className="font-semibold text-gray-900 text-sm">{details.averageSalary}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-600 mb-1">Break-even</p>
+                          <p className="font-semibold text-green-600 text-sm">{(3.2 + index * 0.3).toFixed(1)} Years</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-600 mb-1">Ranking</p>
+                          <p className="font-semibold text-gray-900 text-sm">{details.qsRanking}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-xs text-gray-600 mb-1">Avg Package</p>
-                        <p className="font-semibold text-gray-900 text-sm">{college.avgPackage}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-600 mb-1">Break-even</p>
-                        <p className="font-semibold text-green-600 text-sm">{3.2 + index * 0.3} Years</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-600 mb-1">Ranking</p>
-                        <p className="font-semibold text-gray-900 text-sm">#{college.ranking}</p>
-                      </div>
-                    </div>
 
-                    <div className="flex flex-wrap gap-1 pt-2">
-                      {college.tags.slice(0, 2).map((tag, tagIndex) => (
-                        <span
-                          key={tagIndex}
-                          className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-full font-medium"
-                        >
-                          {tag}
-                        </span>
-                      ))}
+                      <div className="flex flex-wrap gap-1 pt-2">
+                        {college.tags && college.tags.slice(0, 2).map((tag, tagIndex) => (
+                          <span
+                            key={tagIndex}
+                            className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-full font-medium"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                </Card>
-              ))}
+                  </Card>
+                );
+              })}
             </div>
           </div>
         )}
@@ -518,7 +624,7 @@ export default function SummaryStep({
                     {roiData.map((item, index) => (
                       <div key={index} className="bg-blue-50 rounded-lg p-2">
                         <div className="text-xs font-medium text-blue-800">{item.name.split(" ").pop()}</div>
-                        <div className="text-lg font-bold text-blue-900">{item.roi} yrs</div>
+                        <div className="text-lg font-bold text-blue-900">{item.roi.toFixed(1)} yrs</div>
                       </div>
                     ))}
                   </div>

@@ -601,7 +601,7 @@ export default function InitialFormStep({
       } else {
         // If fetch was very recent, show 'Loading' instead of not found
         const now = Date.now()
-        if (fetchStartTimeRef.current && now - fetchStartTimeRef.current < 10000) {
+        if (fetchStartTimeRef.current && now - fetchStartTimeRef.current < 30000) {
           setFetchError("")
         } else {
           setFetchError("No profile found for this phone number. Please check and try again.")
@@ -638,20 +638,7 @@ export default function InitialFormStep({
           Back
         </Button>
 
-        <div className="text-center mb-8">
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ duration: 0.5 }}
-          >
-            <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-gray-900 to-blue-800 bg-clip-text text-transparent mb-3">
-              College Fit Analysis
-            </h1>
-            <p className="text-base md:text-lg text-gray-600 max-w-xl mx-auto">
-              Let us find the perfect colleges tailored to your profile and aspirations
-            </p>
-          </motion.div>
-        </div>
+        {/* Removed heading and subtitle here */}
       </div>
 
       {!profileFetched ? (
@@ -733,18 +720,7 @@ export default function InitialFormStep({
             
 
             {/* Info about data source */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.6, duration: 0.5 }}
-              className="bg-blue-50 border border-blue-200 rounded-xl p-4"
-            >
-              <h4 className="font-semibold text-blue-800 mb-2">📊 Data Source:</h4>
-              <p className="text-sm text-blue-700">
-                We'll fetch your counseling data including college recommendations, course preferences, budget, and more
-                from our comprehensive database.
-              </p>
-            </motion.div>
+            {/* Removed Data Source section here */}
           </div>
         </Card>
       ) : null}

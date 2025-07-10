@@ -20,7 +20,7 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import type { Step, College } from "@/types/college"
 
 interface ResultsStepProps {
@@ -136,6 +136,53 @@ export default function ResultsStep({
   const [selectedCollegeForDetails, setSelectedCollegeForDetails] = useState<College | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [hoveredCollege, setHoveredCollege] = useState<string | null>(null)
+  const [usps, setUsps] = useState<{ [collegeId: string]: string }>({})
+  const [uspsLoading, setUspsLoading] = useState<{ [collegeId: string]: boolean }>({})
+
+  useEffect(() => {
+    colleges.forEach((college) => {
+      if (!usps[college.id] && !uspsLoading[college.id]) {
+        setUspsLoading((prev) => ({ ...prev, [college.id]: true }))
+        fetch(`/api/get-usps-google?college=${encodeURIComponent(college.name)}`)
+          .then(async (res) => {
+            if (!res.ok) {
+              const text = await res.text();
+              throw new Error(`API error: ${res.status} - ${text}`);
+            }
+            const text = await res.text();
+            if (!text) throw new Error("Empty response from USP API");
+            try {
+              return JSON.parse(text);
+            } catch (e) {
+              throw new Error("Invalid JSON from USP API: " + text);
+            }
+          })
+          .then((data) => {
+            if (data.error) {
+              setUsps((prev) => ({
+                ...prev,
+                [college.id]: `Error: ${data.error}${data.details ? ' - ' + JSON.stringify(data.details) : ''}`,
+              }));
+            } else {
+              setUsps((prev) => ({
+                ...prev,
+                [college.id]: data.usps || "No USP data available.",
+              }));
+            }
+          })
+          .catch((err) => {
+            setUsps((prev) => ({
+              ...prev,
+              [college.id]: `Error: ${String(err)}`,
+            }));
+          })
+          .finally(() => {
+            setUspsLoading((prev) => ({ ...prev, [college.id]: false }))
+          })
+      }
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [colleges])
 
   // Cache for college USPs to keep them constant
   const collegeUSPsCache = useRef<{ [collegeId: string]: string[] }>({})
@@ -386,48 +433,34 @@ export default function ResultsStep({
             return (
               <Card
                 key={college.id}
-                className={`p-6 transition-all duration-300 hover:shadow-xl border-2 ${
+                className={`p-3 transition-all duration-300 hover:shadow-xl border-2 ${
                   isSelected
                     ? "border-blue-500 bg-blue-50/50 shadow-lg"
                     : "border-gray-200 bg-white/80 hover:border-gray-300"
                 } backdrop-blur-sm rounded-2xl relative overflow-hidden`}
               >
-                <div className="flex flex-col lg:flex-row gap-4 sm:gap-6 w-full">
+                <div className="flex flex-col lg:flex-row gap-2 sm:gap-3 w-full">
                   {/* Left Section - College Info */}
                   <div className="flex-1">
-                    <div className="flex items-start gap-4 mb-4">
-                      <div className="flex items-center gap-3">
+                    <div className="flex items-start gap-2 mb-1">
+                      <div className="flex items-center gap-1">
                         <div
-                          className={`w-16 h-16 bg-gradient-to-br ${college.color} rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-lg`}
+                          className={`w-12 h-12 bg-gradient-to-br ${college.color} rounded-xl flex items-center justify-center text-white font-bold text-base shadow-lg`}
                         >
                           {college.name.charAt(0)}
                         </div>
-                        <Button
-                          onClick={() => handleComparisonToggle(college.id)}
-                          variant={selectedForComparison.includes(college.id) ? "default" : "outline"}
-                          size="sm"
-                          className={`w-8 h-8 rounded-full p-0 transition-all duration-300 ${
-                            selectedForComparison.includes(college.id)
-                              ? "bg-green-600 hover:bg-green-700 text-white border-2 border-green-600"
-                              : "hover:bg-green-50 hover:border-green-300 border-2 border-gray-300"
-                          }`}
-                          title="Select for comparison"
-                        >
-                          <span className="text-xs font-bold">
-                            {selectedForComparison.includes(college.id) ? "✓" : "+"}
-                          </span>
-                        </Button>
                       </div>
                       <div className="flex-1">
-                        <div className="flex items-start justify-between mb-2">
+                        <div className="flex items-start justify-between mb-0.5">
                           <div>
-                            <h3 className="text-xl font-bold text-gray-900">{college.name}</h3>
-                            <p className="text-gray-600 flex items-center gap-1">
+                            <h3 className="text-lg font-bold text-gray-900 leading-tight mb-0.5">{college.name}</h3>
+                            <p className="text-gray-600 flex items-center gap-1 text-xs mb-0.5">
                               <MapPin className="w-4 h-4" />
                               {college.country}
                             </p>
+                            <div className="mt-2" />
                           </div>
-                          <div className="flex gap-2">
+                          <div className="flex flex-row gap-2 items-center ml-4">
                             <Button
                               variant="outline"
                               size="sm"
@@ -437,7 +470,6 @@ export default function ResultsStep({
                               <Eye className="w-4 h-4 mr-1" />
                               View Details
                             </Button>
-
                             <Button
                               onClick={() => onCollegeToggle(college.id)}
                               variant={isSelected ? "default" : "outline"}
@@ -451,88 +483,85 @@ export default function ResultsStep({
                               <Heart className={`w-4 h-4 mr-1 ${college.liked ? "fill-current" : ""}`} />
                               {college.liked ? "Liked" : "Like"}
                             </Button>
+                            <Button
+                              onClick={() => handleComparisonToggle(college.id)}
+                              variant={selectedForComparison.includes(college.id) ? "default" : "outline"}
+                              size="sm"
+                              className={`transition-all duration-300 ${
+                                selectedForComparison.includes(college.id)
+                                  ? "bg-green-600 hover:bg-green-700 text-white border-2 border-green-600"
+                                  : "hover:bg-green-50 hover:border-green-300 border-2 border-gray-300"
+                              }`}
+                              title="Select for comparison"
+                            >
+                              Compare
+                            </Button>
                           </div>
                         </div>
-
-                        <div className="flex flex-wrap gap-2 mb-3">
-                          {college.rankingData && college.rankingData.rank_value !== "N/A" && (
-                            <Badge className="bg-purple-100 text-purple-800">
-                              <Award className="w-3 h-3 mr-1" />
-                              {college.rankingData.rank_value} ({college.rankingData.rank_provider_name})
-                            </Badge>
-                          )}
-                          <Badge className="bg-blue-100 text-blue-800">
-                            <Star className="w-3 h-3 mr-1" />
-                            Rank #{college.ranking}
-                          </Badge>
-                          <Badge className="bg-green-100 text-green-800">
-                           
-                            {college.tuitionFee} INR per year
-                          </Badge>
-                          <Badge className="bg-purple-100 text-purple-800">
-                            {college.id === "1" ? "3.5 yrs ROI" : college.id === "2" ? "4 yrs ROI" : "5.5 yrs ROI"}
-                          </Badge>
-                        </div>
-
-                        <div className="space-y-2 mb-4">
-                          {details.bulletPoints.slice(0, 4).map((point, idx) => (
-                            <div key={idx} className="flex items-start gap-2 text-gray-700 text-sm">
-                              <div className="w-1.5 h-1.5 bg-blue-600 rounded-full mt-2 flex-shrink-0"></div>
-                              <span>{point}</span>
+                        {/* Compact badges and USPs */}
+                        <div className="mt-0 flex flex-col gap-0.5">
+                          <div className="flex flex-wrap items-center gap-1 mb-0.5">
+                            <div className="flex items-center gap-1 bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full text-xs font-medium">
+                              <Star className="w-3 h-3 mr-1" />
+                              Rank #{college.ranking}
                             </div>
-                          ))}
-                          {/* Additional USP points based on college */}
-                          {college.id === "1" && (
-                            <>
-                              <div className="flex items-start gap-2 text-gray-700 text-sm">
-                                <div className="w-1.5 h-1.5 bg-green-600 rounded-full mt-2 flex-shrink-0"></div>
-                                <span>2-year Graduate Route visa eligibility for post-study work opportunities</span>
-                              </div>
-                              <div className="flex items-start gap-2 text-gray-700 text-sm">
-                                <div className="w-1.5 h-1.5 bg-green-600 rounded-full mt-2 flex-shrink-0"></div>
-                                <span>Lower cost of living compared to London universities (save ₹3.2L+ annually)</span>
-                              </div>
-                            </>
-                          )}
-                          {college.id === "2" && (
-                            <>
-                              <div className="flex items-start gap-2 text-gray-700 text-sm">
-                                <div className="w-1.5 h-1.5 bg-green-600 rounded-full mt-2 flex-shrink-0"></div>
-                                <span>Guaranteed placement year opportunities with 500+ industry partners</span>
-                              </div>
-                              <div className="flex items-start gap-2 text-gray-700 text-sm">
-                                <div className="w-1.5 h-1.5 bg-green-600 rounded-full mt-2 flex-shrink-0"></div>
-                                <span>Flexible entry requirements with foundation year options available</span>
-                              </div>
-                            </>
-                          )}
-                          {college.id === "3" && (
-                            <>
-                              <div className="flex items-start gap-2 text-gray-700 text-sm">
-                                <div className="w-1.5 h-1.5 bg-green-600 rounded-full mt-2 flex-shrink-0"></div>
-                                <span>Scotland's tuition fee advantage - potential savings of ₹21L+ over degree</span>
-                              </div>
-                              <div className="flex items-start gap-2 text-gray-700 text-sm">
-                                <div className="w-1.5 h-1.5 bg-green-600 rounded-full mt-2 flex-shrink-0"></div>
-                                <span>
-                                  Small class sizes (avg 12 students) ensuring personalized attention from faculty
-                                </span>
-                              </div>
-                            </>
-                          )}
-                          {/* For any additional colleges beyond the main 3 */}
-                          {!["1", "2", "3"].includes(college.id) && (
-                            <>
-                              <div className="flex items-start gap-2 text-gray-700 text-sm">
-                                <div className="w-1.5 h-1.5 bg-green-600 rounded-full mt-2 flex-shrink-0"></div>
-                                <span>2-year Graduate Route visa eligibility for post-study work opportunities</span>
-                              </div>
-                              <div className="flex items-start gap-2 text-gray-700 text-sm">
-                                <div className="w-1.5 h-1.5 bg-green-600 rounded-full mt-2 flex-shrink-0"></div>
-                                <span>Excellent industry connections and career support services</span>
-                              </div>
-                            </>
-                          )}
+                            <div className="flex items-center gap-1 bg-green-100 text-green-800 px-2 py-0.5 rounded-full text-xs font-medium">
+                              ₹{String(college.tuitionFee).replace(/[^\d.]/g, "")} INR per year
+                            </div>
+                            <div className="flex items-center gap-1 bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full text-xs font-medium">
+                              {college.id === "1" ? "3.5 yrs ROI" : college.id === "2" ? "4 yrs ROI" : "5.5 yrs ROI"}
+                            </div>
+                          </div>
+                          <div className="mt-0 mb-0.5">
+                            {uspsLoading[college.id] ? (
+                              <div className="text-gray-400 text-xs italic">Loading USPs...</div>
+                            ) : (
+                              <ul className="list-disc pl-5 text-gray-700 text-xs space-y-0.5">
+                                {(() => {
+                                  // Extract only the 4 required USPs from the HTML/text
+                                  const html = usps[college.id] || "<ul><li>No USP data available.</li></ul>";
+                                  // Match all <li>...</li> points
+                                  const matches = html.match(/<li>(.*?)<\/li>/g) || [];
+                                  // Keywords to look for
+                                  const keywords = [
+                                    /placement rate|placement/i,
+                                    /average package|avg package|average salary|avg salary/i,
+                                    /popularity|indian students|popularity/i,
+                                    /affordability|affordable|cost|expense/i,
+                                  ];
+                                  // For each keyword, find the first matching USP
+                                  const filteredUSPs = keywords.map((regex) =>
+                                    matches.find((li) => regex.test(li))
+                                  ).filter(Boolean);
+                                  // If less than 4, fill with the first available USPs
+                                  while (filteredUSPs.length < 4 && matches.length > 0) {
+                                    const next = matches.find(
+                                      (li) => !filteredUSPs.includes(li)
+                                    );
+                                    if (next) filteredUSPs.push(next);
+                                    else break;
+                                  }
+                                  // Render only up to 4 points, filter out undefined and ensure li is a string and not generic/missing data
+                                  return filteredUSPs.slice(0, 4)
+                                    .filter((li): li is string => typeof li === 'string')
+                                    .filter((li) => {
+                                      const text = li.toLowerCase();
+                                      return !(
+                                        text.includes('not been publicly disclosed') ||
+                                        text.includes('not available') ||
+                                        text.includes('n/a') ||
+                                        text.includes('unknown') ||
+                                        text.includes('no data') ||
+                                        text.includes('no information')
+                                      );
+                                    })
+                                    .map((li, i) => (
+                                      <li key={i} dangerouslySetInnerHTML={{ __html: li.replace(/<\/?li>/g, "") }} />
+                                    ));
+                                })()}
+                              </ul>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -540,7 +569,7 @@ export default function ResultsStep({
 
                   {/* Right Section - Key Metrics */}
                   <div className="lg:w-80">
-                    <div className="bg-gradient-to-br from-gray-50 to-white p-4 rounded-xl border">
+                    <div className="bg-gradient-to-br from-gray-50 to-white p-3 rounded-xl border">
                       <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
                         <TrendingUp className="w-4 h-4 text-blue-600" />
                         Key Metrics

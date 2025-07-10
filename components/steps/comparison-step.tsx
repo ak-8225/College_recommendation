@@ -15,6 +15,8 @@ interface ComparisonStepProps {
   selectedForComparison: string[]
   onNext: (step: Step) => void
   onBack: () => void
+  tuitionFees: { [key: string]: string }
+  rankingData: { [key: string]: { rank_value: string; rank_provider_name: string } } // Added prop
 }
 
 export default function ComparisonStep({
@@ -24,6 +26,8 @@ export default function ComparisonStep({
   selectedForComparison,
   onNext,
   onBack,
+  tuitionFees = {},
+  rankingData = {}, // Added prop
 }: ComparisonStepProps) {
   const [selectedTheme, setSelectedTheme] = useState("all")
 
@@ -130,6 +134,47 @@ export default function ComparisonStep({
     return facultyData[collegeName] || facultyData["default"]
   }
 
+  // Helper function to find tuition fee for a college (copied from initial-form-step.tsx)
+  const findTuitionFee = (collegeName: string, tuitionFees?: { [key: string]: string }): string => {
+    if (!collegeName) return "₹25.0L"
+    if (!tuitionFees) return "₹25.0L"
+    if (tuitionFees[collegeName]) {
+      return tuitionFees[collegeName]
+    }
+    const lowerName = collegeName.toLowerCase().trim()
+    if (tuitionFees[lowerName]) {
+      return tuitionFees[lowerName]
+    }
+    for (const [key, value] of Object.entries(tuitionFees)) {
+      if (key.toLowerCase().includes(lowerName) || lowerName.includes(key.toLowerCase())) {
+        return value
+      }
+    }
+    return "₹25.0L"
+  }
+
+  // Helper function to find ranking data for a college (copied from initial-form-step.tsx)
+  const findRankingData = (
+    collegeName: string,
+    rankingData: { [key: string]: { rank_value: string; rank_provider_name: string } }
+  ): { rank_value: string; rank_provider_name: string } => {
+    if (!collegeName) return { rank_value: "N/A", rank_provider_name: "N/A" }
+    if (!rankingData) return { rank_value: "N/A", rank_provider_name: "N/A" }
+    if (rankingData[collegeName]) {
+      return rankingData[collegeName]
+    }
+    const lowerName = collegeName.toLowerCase().trim()
+    if (rankingData[lowerName]) {
+      return rankingData[lowerName]
+    }
+    for (const [key, value] of Object.entries(rankingData)) {
+      if (key.toLowerCase().includes(lowerName) || lowerName.includes(key.toLowerCase())) {
+        return value
+      }
+    }
+    return { rank_value: "N/A", rank_provider_name: "N/A" }
+  }
+
   // Comprehensive metrics with real data from QS Rankings and official sources
   const allMetrics = {
     career: [
@@ -169,7 +214,16 @@ export default function ComparisonStep({
     affordability: [
       {
         label: "Annual Tuition Fees",
-        values: selectedColleges.map((college) => college.tuitionFee || "₹25.0L"),
+        // TODO: Make sure tuitionFees object is available in this scope (pass as prop or context if needed)
+        values: selectedColleges.map((college) => {
+          const fee = findTuitionFee(college.name, tuitionFees)
+          if (fee && fee !== "N/A" && fee !== "") return fee
+          // fallback to ranking if tuition fee is not available
+          const rankingData = college.rankingData || { rank_value: "N/A", rank_provider_name: "N/A" }
+          return rankingData.rank_value !== "N/A"
+            ? `${rankingData.rank_value} (${rankingData.rank_provider_name})`
+            : `Rank #${college.ranking}`
+        }),
         source: "University Official Websites 2024",
         description: "Annual tuition fees for international students",
         methodology: "Official published fees from university websites converted from GBP to INR",
@@ -224,9 +278,10 @@ export default function ComparisonStep({
       {
         label: "University Ranking",
         values: selectedColleges.map((college) => {
-          const rankingData = college.rankingData || { rank_value: "N/A", rank_provider_name: "N/A" }
-          return rankingData.rank_value !== "N/A"
-            ? `${rankingData.rank_value} (${rankingData.rank_provider_name})`
+          // TODO: Make sure rankingData object is available in this scope (pass as prop or context if needed)
+          const ranking = findRankingData(college.name, rankingData)
+          return ranking.rank_value !== "N/A"
+            ? `${ranking.rank_value} (${ranking.rank_provider_name})`
             : "N/A"
         }),
         source: "QS World University Rankings, Times Higher Education Rankings 2024",
@@ -407,23 +462,30 @@ export default function ComparisonStep({
                 <thead>
                   <tr className="border-b sticky top-0 z-30 bg-gray-50/90 shadow">
                     <th className="sticky left-0 z-40 bg-white text-left p-4 font-semibold min-w-[200px]">Metric</th>
-                    {selectedColleges.map((college) => (
-                      <th key={college.id} className="text-center p-4 font-semibold text-gray-900 min-w-[150px]">
-                        <div className="flex flex-col items-center gap-2">
-                          <div
-                            className={`w-8 h-8 bg-gradient-to-br ${college.color} rounded-lg flex items-center justify-center text-white font-bold text-sm`}
-                          >
-                            {college.name.charAt(0)}
+                    {selectedColleges.map((college, index) => {
+                      const metrics = getMetricsForTheme()
+                      const bestCount = metrics.filter((metric, metricIndex) =>
+                        isValueBest(metric.values[index] || "N/A", metric.values.slice(0, selectedColleges.length), metric.type),
+                      ).length
+                      return (
+                        <th key={college.id} className="text-center p-4 font-semibold text-gray-900 min-w-[150px]">
+                          <div className="flex flex-col items-center gap-2">
+                            <div
+                              className={`w-8 h-8 bg-gradient-to-br ${college.color} rounded-lg flex items-center justify-center text-white font-bold text-sm`}
+                            >
+                              {college.name.charAt(0)}
+                            </div>
+                            <span className="text-sm flex items-center justify-center gap-1">
+                              {college.name}
+                              {college.liked && (
+                                <Heart className="w-4 h-4 ml-1 text-red-500 fill-red-500" />
+                              )}
+                            </span>
+                            <span className="text-green-600 font-bold text-base">{bestCount}/{metrics.length} metrics</span>
                           </div>
-                          <span className="text-sm flex items-center justify-center gap-1">
-                            {college.name}
-                            {college.liked && (
-                              <Heart className="w-4 h-4 ml-1 text-red-500 fill-red-500" />
-                            )}
-                          </span>
-                        </div>
-                      </th>
-                    ))}
+                        </th>
+                      )
+                    })}
                   </tr>
                 </thead>
                 <tbody>
@@ -471,74 +533,6 @@ export default function ComparisonStep({
             </div>
           </CardContent>
         </Card>
-
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {selectedColleges.map((college, index) => {
-            const metrics = getMetricsForTheme()
-            const bestCount = metrics.filter((metric, metricIndex) =>
-              isValueBest(metric.values[index] || "N/A", metric.values.slice(0, selectedColleges.length), metric.type),
-            ).length
-
-            return (
-              <Card key={college.id} className="p-6 bg-white/80 backdrop-blur-sm border-2 border-gray-200">
-                <div className="flex items-center gap-3 mb-4">
-                  <div
-                    className={`w-12 h-12 bg-gradient-to-br ${college.color} rounded-xl flex items-center justify-center text-white font-bold text-lg`}
-                  >
-                    {college.name.charAt(0)}
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-gray-900">{college.name}</h3>
-                    <p className="text-sm text-gray-600">{college.country}</p>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600">Best in Category:</span>
-                    <span className="font-bold text-green-600">
-                      {bestCount}/{metrics.length} metrics
-                    </span>
-                  </div>
-
-                  <div className="pt-3 border-t border-gray-200">
-                    <div className="text-xs text-gray-500 space-y-1">
-                      <div className="flex justify-between">
-                        <span>Annual Fees:</span>
-                        <span className="font-medium">{college.tuitionFee}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Living Costs:</span>
-                        <span className="font-medium">{college.livingCosts?.living_expense || "₹12.6L"}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Accommodation:</span>
-                        <span className="font-medium">
-                          {college.livingCosts?.accommodation || "₹54,947-79,431/month"}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Transportation:</span>
-                        <span className="font-medium">
-                          {college.livingCosts?.transportation || "₹11,681-18,689/month"}
-                        </span>
-                      </div>
-                      {college.rankingData && college.rankingData.rank_value !== "N/A" && (
-                        <div className="flex justify-between">
-                          <span>Ranking:</span>
-                          <span className="font-medium">
-                            {college.rankingData.rank_value} ({college.rankingData.rank_provider_name})
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </Card>
-            )
-          })}
-        </div>
 
         {/* Data Sources */}
         <Card className="p-4 bg-blue-50/50 border-blue-200">
