@@ -5,7 +5,7 @@ import { ArrowLeft, Target, TrendingUp, DollarSign, Award, Filter, Info, Heart }
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import type { Step, College } from "@/types/college"
 
 interface ComparisonStepProps {
@@ -30,6 +30,9 @@ export default function ComparisonStep({
   rankingData = {}, // Added prop
 }: ComparisonStepProps) {
   const [selectedTheme, setSelectedTheme] = useState("all")
+  // New: State to store fetched metrics for each college
+  const [comparisonMetrics, setComparisonMetrics] = useState<{ [collegeId: string]: string | null }>({})
+  const [metricsLoading, setMetricsLoading] = useState<{ [collegeId: string]: boolean }>({})
 
   const themes = {
     all: {
@@ -67,6 +70,34 @@ export default function ComparisonStep({
   }
 
   const selectedColleges = colleges.filter((college) => selectedForComparison.includes(college.id))
+
+  // Fetch metrics for each selected college
+  useEffect(() => {
+    selectedColleges.forEach((college) => {
+      if (!comparisonMetrics[college.id] && !metricsLoading[college.id]) {
+        setMetricsLoading((prev) => ({ ...prev, [college.id]: true }))
+        fetch("/api/get-comparison-metrics", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ college: college.name }),
+        })
+          .then(async (res) => {
+            if (!res.ok) throw new Error(await res.text())
+            return res.json()
+          })
+          .then((data) => {
+            console.log("API metrics response", data.metrics); // Debug: log API response
+            setComparisonMetrics((prev) => ({ ...prev, [college.id]: data.metrics || null }))
+          })
+          .catch(() => {
+            setComparisonMetrics((prev) => ({ ...prev, [college.id]: null }))
+          })
+          .finally(() => {
+            setMetricsLoading((prev) => ({ ...prev, [college.id]: false }))
+          })
+      }
+    })
+  }, [selectedColleges])
 
   // Get employment data based on QS Graduate Employability Rankings and university career services data
   const getEmploymentData = (collegeName: string) => {
@@ -173,6 +204,46 @@ export default function ComparisonStep({
       }
     }
     return { rank_value: "N/A", rank_provider_name: "N/A" }
+  }
+
+  // Helper to parse bullet points from the OpenAI API response
+  function parseMetrics(metricsText: string): { [label: string]: string } {
+    // If the response is a guidance message or apology, return empty so all metrics show as N/A
+    const lower = metricsText.toLowerCase()
+    if (
+      lower.includes("i don't have access") ||
+      lower.includes("guidance") ||
+      lower.includes("contact the college") ||
+      lower.includes("check the college") ||
+      lower.includes("for statistics")
+    ) {
+      return {}
+    }
+    const lines = metricsText.split(/\n|\r/).filter(Boolean)
+    const result: { [label: string]: string } = {}
+    lines.forEach(line => {
+      // Match: - Label: value OR – Label: value
+      const match = line.match(/^[–-]\s*([^:]+):\s*(.+)$/)
+      if (match) {
+        // Extract only the main data point (number, percentage, or short phrase)
+        let value = (match[2] || '').trim()
+        // Remove sentences after the first period, unless the value is a number/percentage/currency
+        const shortValueMatch = value.match(/([\d,.]+ ?[%$€£₹]?(?: ?\([^)]+\))?)/)
+        if (shortValueMatch) {
+          value = shortValueMatch[0]
+        } else {
+          // Otherwise, take the first phrase before a period or semicolon
+          value = value.split(/[.;\n]/)[0].trim()
+        }
+        result[match[1].trim()] = value
+      }
+    })
+    return result
+  }
+
+  // Helper to normalize label strings for matching
+  function normalizeLabel(label: string) {
+    return label.toLowerCase().replace(/[^a-z0-9]+/g, '').trim()
   }
 
   // Comprehensive metrics with real data from QS Rankings and official sources
@@ -375,6 +446,65 @@ export default function ComparisonStep({
     return false
   }
 
+  // When rendering the table, use comparisonMetrics[college.id] if available, otherwise fallback to local logic
+  const metricsForColleges: { [collegeId: string]: { [label: string]: string } } = {}
+  selectedColleges.forEach((college) => {
+    if (comparisonMetrics[college.id]) {
+      // Debug: log the raw API response string before parsing
+      console.log('RAW API metrics string for', college.name, ':', comparisonMetrics[college.id])
+      metricsForColleges[college.id] = parseMetrics(comparisonMetrics[college.id] || "")
+    }
+  })
+
+  // List of metric labels in the order to display
+  const metricLabels = [
+    "Graduate Employability Rate",
+    "Average Starting Salary",
+    "Career Progression Rate",
+    "Industry Network Score",
+    "Annual Tuition Fees",
+    "Living Costs (Annual)",
+    "Accommodation Costs",
+    "Transportation Costs",
+    "Scholarship Availability",
+    "Total Cost of Study",
+    "University Ranking",
+    "Student Satisfaction Score",
+    "Research Quality Rating",
+    "International Student Ratio",
+  ]
+
+  // Static mapping of sources for each metric label
+  const metricSources: { [label: string]: string } = {
+    "Graduate Employability Rate": "QS Graduate Employability Rankings / University Career Services",
+    "Average Starting Salary": "QS Graduate Employability Rankings / National Salary Surveys",
+    "Career Progression Rate": "University Alumni Career Tracking Studies",
+    "Industry Network Score": "QS Graduate Employability Rankings - Employer Partnerships",
+    "Annual Tuition Fees": "University Official Websites",
+    "Living Costs (Annual)": "UKCISA / University Cost of Living Data",
+    "Accommodation Costs": "University Accommodation Services",
+    "Transportation Costs": "UK Transport Authorities & Student Surveys",
+    "Scholarship Availability": "University Financial Aid Offices",
+    "Total Cost of Study": "Calculated from Tuition & Living Costs",
+    "University Ranking": "QS / THE World University Rankings",
+    "Student Satisfaction Score": "National Student Survey / University Surveys",
+    "Research Quality Rating": "Research Excellence Framework / National Research Assessment",
+    "International Student Ratio": "HESA / University Enrollment Data",
+    "Faculty-to-Student Ratio": "University Academic Reports / QS Rankings",
+  }
+
+  // Mapping for metric display formats/scales
+  const metricFormats: { [label: string]: (value: string) => string } = {
+    "Industry Network Score": (v) => /\d+$/.test(v) ? v + "/10" : v,
+    "Student Satisfaction Score": (v) => /\d+$/.test(v) ? v + "/100" : v,
+    "Research Quality Rating": (v) => /\d+$/.test(v) ? v + "/10" : v,
+    "Graduate Employability Rate": (v) => /\d+$/.test(v) ? v + "%" : v,
+    "Career Progression Rate": (v) => /\d+$/.test(v) ? v + "%" : v,
+    "International Student Ratio": (v) => /\d+$/.test(v) ? v + "%" : v,
+    "Scholarship Availability": (v) => /\d+$/.test(v) ? v + "%" : v,
+    // Add more as needed
+  }
+
   return (
     <TooltipProvider>
       <motion.div
@@ -462,66 +592,79 @@ export default function ComparisonStep({
                 <thead>
                   <tr className="border-b sticky top-0 z-30 bg-gray-50/90 shadow">
                     <th className="sticky left-0 z-40 bg-white text-left p-4 font-semibold min-w-[200px]">Metric</th>
-                    {selectedColleges.map((college, index) => {
-                      const metrics = getMetricsForTheme()
-                      const bestCount = metrics.filter((metric, metricIndex) =>
-                        isValueBest(metric.values[index] || "N/A", metric.values.slice(0, selectedColleges.length), metric.type),
-                      ).length
-                      return (
-                        <th key={college.id} className="text-center p-4 font-semibold text-gray-900 min-w-[150px]">
-                          <div className="flex flex-col items-center gap-2">
-                            <div
-                              className={`w-8 h-8 bg-gradient-to-br ${college.color} rounded-lg flex items-center justify-center text-white font-bold text-sm`}
-                            >
-                              {college.name.charAt(0)}
-                            </div>
-                            <span className="text-sm flex items-center justify-center gap-1">
-                              {college.name}
-                              {college.liked && (
-                                <Heart className="w-4 h-4 ml-1 text-red-500 fill-red-500" />
-                              )}
-                            </span>
-                            <span className="text-green-600 font-bold text-base">{bestCount}/{metrics.length} metrics</span>
+                    {selectedColleges.map((college) => (
+                      <th key={college.id} className="text-center p-4 font-semibold text-gray-900 min-w-[150px]">
+                        <div className="flex flex-col items-center gap-2">
+                          <div
+                            className={`w-8 h-8 bg-gradient-to-br ${college.color} rounded-lg flex items-center justify-center text-white font-bold text-sm`}
+                          >
+                            {college.name.charAt(0)}
                           </div>
-                        </th>
-                      )
-                    })}
+                          <span className="text-sm flex items-center justify-center gap-1">
+                            {college.name}
+                            {college.liked && (
+                              <Heart className="w-4 h-4 ml-1 text-red-500 fill-red-500" />
+                            )}
+                          </span>
+                        </div>
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {getMetricsForTheme().map((metric, index) => (
-                    <tr key={index} className={`border-b hover:bg-gray-50/50 ${index % 2 === 0 ? "bg-white" : ""}`}>
+                  {metricLabels.map((label, rowIdx) => (
+                    <tr key={label} className={`border-b hover:bg-gray-50/50 ${rowIdx % 2 === 0 ? "bg-white" : ""}`}>
                       <td className="sticky left-0 z-20 bg-white p-4">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-gray-900">{metric.label}</span>
+                        <span className="font-medium text-gray-900 flex items-center gap-2">
+                          {label}
                           <Tooltip>
                             <TooltipTrigger>
                               <Info className="w-4 h-4 text-gray-400 hover:text-gray-600" />
                             </TooltipTrigger>
                             <TooltipContent className="max-w-xs">
-                              <div className="space-y-2">
-                                <p className="font-medium">{metric.description}</p>
-                                <p className="text-xs text-gray-600">Source: {metric.source}</p>
-                                <p className="text-xs text-gray-500">Methodology: {metric.methodology}</p>
-                              </div>
+                              <span className="text-xs text-gray-700">{metricSources[label] || "Estimated from regional averages / OpenAI"}</span>
                             </TooltipContent>
                           </Tooltip>
-                        </div>
+                        </span>
                       </td>
-                      {selectedColleges.map((college, collegeIndex) => {
-                        const value = metric.values[collegeIndex] || "N/A"
-                        const isBest = isValueBest(value, metric.values.slice(0, selectedColleges.length), metric.type)
+                      {selectedColleges.map((college) => {
+                        const loading = metricsLoading[college.id]
+                        const metrics = metricsForColleges[college.id]
+                        // Debug: log the metrics object, label, and keys
+                        if (metrics) {
+                          console.log('DEBUG metrics:', metrics, 'label:', label, 'keys:', Object.keys(metrics))
+                        }
+                        // Normalize label for matching
+                        let value = undefined
+                        if (metrics) {
+                          const normLabel = normalizeLabel(label)
+                          for (const key in metrics) {
+                            if (normalizeLabel(key) === normLabel) {
+                              value = metrics[key]
+                              // Apply metric format if available
+                              if (value && metricFormats[label]) {
+                                value = metricFormats[label](value)
+                              }
+                              break
+                            }
+                          }
+                        }
+                        if (loading) value = "Loading..."
+                        if (!value && !loading) {
+                          value = "N/A"
+                        }
                         return (
                           <td key={college.id} className="p-4 text-center">
                             <span
                               className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
-                                isBest
-                                  ? "bg-green-100 text-green-800 border border-green-200"
+                                value === "Loading..."
+                                  ? "bg-gray-100 text-gray-400"
+                                  : value !== "N/A"
+                                  ? "bg-gray-100 text-green-800 border border-green-200"
                                   : "bg-gray-100 text-gray-800"
                               }`}
                             >
                               {value}
-                              {isBest && <span className="ml-1">🏆</span>}
                             </span>
                           </td>
                         )

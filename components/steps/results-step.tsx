@@ -147,7 +147,7 @@ export default function ResultsStep({
           .then(async (res) => {
             if (!res.ok) {
               const text = await res.text();
-              throw new Error(`API error: ${res.status} - ${text}`);
+              throw new Error(`cool, coolAPI error: ${res.status} - ${text}`);
             }
             const text = await res.text();
             if (!text) throw new Error("Empty response from USP API");

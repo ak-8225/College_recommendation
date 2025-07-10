@@ -29,6 +29,27 @@ Answer everything **very objectively** and in **bullet points**, within **300 wo
 Keep readability **super easy**. Use proper **HTML tags** for formatting.
 `;
 
+// --- New: Comparison Metrics Endpoint ---
+const COMPARISON_PROMPT = `You are a study abroad data expert specializing in analyzing university metrics for international students. Based on the university name, return accurate, latest available, and structured data for the following indicators:
+
+1. Graduate Employability Rate – percentage of graduates employed or in further study within 6 months to a year.
+2. Average Starting Salary – average salary of recent graduates in local currency and USD equivalent.
+3. Career Progression Rate – percentage of graduates promoted or changed roles within 3 years of graduation.
+4. Industry Network Score – qualitative or quantitative score reflecting university's collaboration with industries or corporates.
+5. Annual Tuition Fees – latest undergraduate tuition fees (converted to USD if not in local currency).
+6. Living Costs (Annual) – average cost of living per year for an international student.
+7. Accommodation Costs – typical on-campus or off-campus housing costs per year.
+8. Transportation Costs – average yearly commute expenses for students in the city.
+9. Scholarship Availability – percentage of international students who receive scholarships OR highlight popular scholarships available.
+10. Total Cost of Study – estimated total of tuition + living + other essential costs per year.
+11. University Ranking – most recent QS or THE global ranking.
+12. Student Satisfaction Score – out of 100, based on internal surveys or global ratings.
+13. Research Quality Rating – based on citation impact or national research assessment score.
+14. International Student Ratio – percentage of international students enrolled.
+15. Faculty-to-Student Ratio – for example, 1:10, or numeric format.
+
+Return all the information in bullet points, within 300 words. Keep language clear and objective, avoid filler text or marketing tone. Only return the data points, no explanation or extra text.`;
+
 export async function GET(req) {
   const { searchParams } = new URL(req.url);
   const college = searchParams.get('college');
@@ -36,6 +57,71 @@ export async function GET(req) {
 }
 
 export async function POST(req) {
+  const url = new URL(req.url || '', 'http://localhost');
+  if (url.pathname.endsWith('/get-comparison-metrics')) {
+    const body = await req.json();
+    const college = body.college;
+    if (!college || typeof college !== 'string') {
+      return new Response(JSON.stringify({
+        error: 'Missing college name',
+        details: 'Please provide a college name in the body.'
+      }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (!OPENAI_API_KEY) {
+      return new Response(JSON.stringify({
+        error: 'Missing OpenAI API key',
+        details: 'Make sure OPENAI_API_KEY is defined in your environment variables.'
+      }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+    }
+    const prompt = `${COMPARISON_PROMPT}\n\nUniversity: ${college}`;
+    const apiUrl = 'https://api.openai.com/v1/chat/completions';
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+    try {
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          messages: [
+            { role: 'system', content: 'You are a helpful assistant.' },
+            { role: 'user', content: prompt },
+          ],
+          max_tokens: 700,
+          temperature: 0.2,
+        }),
+        signal: controller.signal
+      });
+      clearTimeout(timeout);
+      if (!response.ok) {
+        const errorText = await response.text();
+        return new Response(JSON.stringify({
+          error: `OpenAI API request failed with status ${response.status}`,
+          details: errorText
+        }), { status: response.status, headers: { 'Content-Type': 'application/json' } });
+      }
+      const data = await response.json();
+      const resultText = data?.choices?.[0]?.message?.content;
+      if (resultText) {
+        return new Response(JSON.stringify({
+          metrics: resultText
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      } else {
+        return new Response(JSON.stringify({
+          error: 'No valid response from OpenAI API',
+          details: data
+        }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+      }
+    } catch (err) {
+      return new Response(JSON.stringify({
+        error: 'Internal server error',
+        details: err.name === 'AbortError' ? 'Request timed out after 30s' : String(err)
+      }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+    }
+  }
   const body = await req.json();
   const college = body.college;
   return await handleUSP(college);
