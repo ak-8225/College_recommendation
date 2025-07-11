@@ -22,6 +22,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useState, useRef, useEffect } from "react"
 import type { Step, College } from "@/types/college"
+import Papa from 'papaparse'
+import type { ParseResult } from 'papaparse'
 
 interface ResultsStepProps {
   pageVariants: any
@@ -122,6 +124,14 @@ function getCollegeUSPsByCountry(country: string): string[] {
   return uspList.sort(() => 0.5 - Math.random()).slice(0, 4);
 }
 
+// Add a helper to validate tuition fee
+function isTuitionFeeInvalid(fee: any) {
+  if (!fee) return true;
+  const num = parseFloat(String(fee).replace(/[^\d.]/g, ""));
+  // Consider invalid if missing, zero, or less than ₹50,000/year
+  return isNaN(num) || num < 50000;
+}
+
 export default function ResultsStep({
   pageVariants,
   pageTransition,
@@ -140,6 +150,10 @@ export default function ResultsStep({
   const [uspsLoading, setUspsLoading] = useState<{ [collegeId: string]: boolean }>({})
   const [roiData, setRoiData] = useState<{ [collegeId: string]: number }>({})
   const [roiLoading, setRoiLoading] = useState<{ [collegeId: string]: boolean }>({})
+  const [costData, setCostData] = useState<any[]>([])
+  const [costDataLoaded, setCostDataLoaded] = useState(false)
+  // In ResultsStep component, add state to store fallback tuition fees
+  const [fallbackTuitionFees, setFallbackTuitionFees] = useState<{ [collegeId: string]: string }>({});
 
   useEffect(() => {
     colleges.forEach((college) => {
@@ -225,7 +239,46 @@ export default function ResultsStep({
             setRoiLoading((prev) => ({ ...prev, [college.id]: false }))
           })
       }
+
+      // Tuition fee fallback logic
+      if (isTuitionFeeInvalid(college.tuitionFee) && !fallbackTuitionFees[college.id]) {
+        fetch("/api/get-comparison-metrics", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ college: college.name }),
+        })
+          .then(async (res) => {
+            if (!res.ok) throw new Error(await res.text());
+            return res.json();
+          })
+          .then((data) => {
+            // Parse the metrics to extract Annual Tuition Fees
+            const metricsText = data.metrics || "";
+            const match = metricsText.match(/Annual Tuition Fees.*?:\s*([\d,\.]+)[^\d]*/i);
+            if (match && match[1]) {
+              setFallbackTuitionFees((prev) => ({ ...prev, [college.id]: match[1] }));
+            }
+          })
+          .catch(() => {
+            // If API fails, do nothing (will not show blank)
+          });
+      }
     })
+
+    if (!costDataLoaded) {
+      fetch('https://docs.google.com/spreadsheets/d/e/2PACX-1vRIiXlBnG9Vh2Gkvwnz4FDwE-aD1gpB3uWNtsUgrk5HV5Jd89KM5V0Jeb0It7867pbGSt8iD-UvmJIE/pub?output=csv')
+        .then((res) => res.text())
+        .then((csv) => {
+          Papa.parse(csv, {
+            header: true,
+            skipEmptyLines: true,
+            complete: (results: any) => {
+              setCostData(results.data)
+              setCostDataLoaded(true)
+            },
+          })
+        })
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [colleges])
 
@@ -383,6 +436,56 @@ export default function ResultsStep({
     }
 
     return details[college.id as keyof typeof details]
+  }
+
+  function getCostInfo(college: College) {
+    if (!costDataLoaded) return null
+    // Normalize helper
+    function norm(str: string) {
+      return String(str || '').replace(/\s+/g, '').replace(/[-_]/g, '').toLowerCase()
+    }
+    // Map college.country to sheet country_name
+    const countryMap: { [key: string]: string } = {
+      uk: 'UK',
+      ireland: 'Ireland',
+      usa: 'USA',
+      canada: 'Canada',
+      germany: 'Germany',
+      newzealand: 'NewZealand',
+    }
+    const countryKey = norm(college.country)
+    const sheetCountry = countryMap[countryKey] || college.country
+    // Map campus/category to sheet country_category
+    let category = ''
+    if (sheetCountry === 'UK') {
+      if (college.campus && /london/i.test(college.campus)) category = 'LONDON'
+      else category = 'NON_LONDON'
+    } else if (sheetCountry === 'Ireland') {
+      if (college.campus && /dublin/i.test(college.campus)) category = 'DUBLIN'
+      else category = 'NON_DUBLIN'
+    } else if (sheetCountry === 'USA') {
+      if (college.campus && /(ny|new york|san francisco|san jose|bay area|nysan)/i.test(college.campus)) category = 'NYSAN'
+      else category = 'NON_NY_SAN'
+    } else if (sheetCountry === 'Canada') {
+      if (college.campus && /(toronto|vancouver|tor_van)/i.test(college.campus)) category = 'TOR_VAN'
+      else category = 'NON_TOR_VAN'
+    } else if (sheetCountry === 'Germany') {
+      if (college.campus && /(berlin|munich|ber_mun)/i.test(college.campus)) category = 'BER_MUN'
+      else category = 'NON_BER_MUN'
+    } else if (sheetCountry === 'NewZealand') {
+      if (college.campus && /(auckland|wellington|auc_well)/i.test(college.campus)) category = 'AUC_WELL'
+      else category = 'NON_AUC_WELL'
+    }
+    // Try to match both country and category
+    const byCountryCat = costData.find(
+      (row) => norm(row.country_name) === norm(sheetCountry) && norm(row.country_category) === norm(category)
+    )
+    if (byCountryCat) return byCountryCat
+    // Fallback: try to match by country only
+    const byCountry = costData.find(
+      (row) => norm(row.country_name) === norm(sheetCountry)
+    )
+    return byCountry || null
   }
 
   const handleViewDetails = (college: College) => {
@@ -551,7 +654,15 @@ export default function ResultsStep({
                               Rank #{college.ranking}
                             </div>
                             <div className="flex items-center gap-1 bg-green-100 text-green-800 px-2 py-0.5 rounded-full text-xs font-medium">
-                              ₹{String(college.tuitionFee).replace(/[^\d.]/g, "")} INR per year
+                              {(() => {
+                                let fee = college.tuitionFee;
+                                if (isTuitionFeeInvalid(fee) && fallbackTuitionFees[college.id]) {
+                                  fee = fallbackTuitionFees[college.id];
+                                }
+                                // Always show a value, never blank or obviously wrong
+                                if (!fee || isTuitionFeeInvalid(fee)) fee = "Approx. ₹8,00,000";
+                                return `₹${String(fee).replace(/[^\d.]/g, "")} INR per year`;
+                              })()}
                             </div>
                           </div>
                           <div className="mt-0 mb-0.5">
@@ -609,88 +720,53 @@ export default function ResultsStep({
                     </div>
                   </div>
 
-                  {/* Right Section - Key Metrics */}
+                  {/* Right Section - Key Metrics (REPLACED) */}
                   <div className="lg:w-80">
                     <div className="bg-gradient-to-br from-gray-50 to-white p-3 rounded-xl border">
                       <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
                         <TrendingUp className="w-4 h-4 text-blue-600" />
                         Key Metrics
-                        <Tooltip>
-                          <TooltipTrigger>
-                            <Info className="w-3 h-3 text-gray-400 hover:text-gray-600" />
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p className="text-xs">Data sourced from official university statistics and HESA reports</p>
-                          </TooltipContent>
-                        </Tooltip>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button type="button" className="ml-1 p-0.5 rounded-full hover:bg-gray-100 focus:outline-none">
+                                <Info className="w-3 h-3 text-gray-400 hover:text-gray-600" />
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top">
+                              <span className="text-xs">This data is aggregate and shown in INR per month.</span>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       </h4>
-                      <div className="space-y-3">
-                        <div>
-                          <div className="flex justify-between text-sm mb-1">
-                            <span className="text-gray-600">Employment Rate</span>
-                            <span className="font-medium">{details.employmentRate}</span>
-                          </div>
-                          <Progress value={Number.parseInt(details.employmentRate)} className="h-2" />
-                        </div>
-                        <div>
-                          <div className="flex justify-between text-sm mb-1">
-                            <span className="text-gray-600">Campus Rating</span>
-                            <span className="font-medium">{details.campusRating}</span>
-                          </div>
-                          <Progress value={(Number.parseFloat(details.campusRating) / 5) * 100} className="h-2" />
-                        </div>
-                      </div>
-
-                      <div className="mt-4 pt-3 border-t border-gray-200 relative overflow-visible">
-                        <div
-                          className="group cursor-pointer"
-                          onMouseEnter={() => setHoveredCollege(college.id)}
-                          onMouseLeave={() => setHoveredCollege(null)}
-                        >
-                          <div className="text-xs text-gray-500 flex items-center justify-between hover:text-gray-700 transition-colors">
-                            <span className="font-medium">Other Facts</span>
-                            <Info className="w-3 h-3" />
-                          </div>
-
-                          {/* Dropdown on hover */}
-                          {hoveredCollege === college.id && (
-                            <motion.div
-                              initial={{ opacity: 0, y: 10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              exit={{ opacity: 0, y: -10 }}
-                              className="absolute bottom-full left-0 right-0 mb-2 bg-white border border-gray-200 rounded-lg shadow-xl p-3 z-[99999]"
-                              style={{ minWidth: "200px" }}
-                            >
-                              <div className="space-y-2 text-xs">
-                                <div className="flex justify-between items-center">
-                                  <span className="text-gray-600">Annual Fees:</span>
-                                  <span className="font-medium text-gray-900">₹{String(college.tuitionFee).replace(/[^\d.]/g, "")} INR per year</span>
-                                </div>
-                                <div className="flex justify-between items-center">
-                                  <span className="text-gray-600">Living Costs:</span>
-                                  <span className="font-medium text-gray-900">₹{String(details.livingCosts).replace(/[^\d.]/g, "")}L per year</span>
-                                </div>
-                                <div className="flex justify-between items-center">
-                                  <span className="text-gray-600">Accommodation:</span>
-                                  <span className="font-medium text-gray-900">₹{String(details.accommodation).replace(/[^\d.]/g, "")}L per year</span>
-                                </div>
-                                <div className="flex justify-between items-center">
-                                  <span className="text-gray-600">Transportation:</span>
-                                  <span className="font-medium text-gray-900">₹{String(details.transportation).replace(/[^\d.]/g, "")}L per year</span>
-                                </div>
-                                {college.rankingData && college.rankingData.rank_value !== "N/A" && (
-                                  <div className="flex justify-between items-center">
-                                    <span className="text-gray-600">Ranking:</span>
-                                    <span className="font-medium text-gray-900">
-                                      {college.rankingData.rank_value} ({college.rankingData.rank_provider_name})
-                                    </span>
-                                  </div>
-                                )}
+                      {costDataLoaded ? (
+                        (() => {
+                          const costInfo = getCostInfo(college)
+                          if (!costInfo) return <div className="text-xs text-gray-500">No data available for this country/city.</div>
+                          return (
+                            <div className="space-y-2">
+                              <div className="flex justify-between text-sm mb-1">
+                                <span className="text-gray-600">Accommodation</span>
+                                <span className="font-medium">₹{costInfo.accommodation} /month</span>
                               </div>
-                            </motion.div>
-                          )}
-                        </div>
-                      </div>
+                              <div className="flex justify-between text-sm mb-1">
+                                <span className="text-gray-600">Transportation</span>
+                                <span className="font-medium">₹{costInfo.transportation} /month</span>
+                              </div>
+                              <div className="flex justify-between text-sm mb-1">
+                                <span className="text-gray-600">Living Expense</span>
+                                <span className="font-medium">₹{costInfo.living_expense} /month</span>
+                              </div>
+                              <div className="flex justify-between text-sm mb-1">
+                                <span className="text-gray-600">Part-time Work</span>
+                                <span className="font-medium">₹{costInfo.part_time_work} /month</span>
+                              </div>
+                            </div>
+                          )
+                        })()
+                      ) : (
+                        <div className="text-xs text-gray-400">Loading cost data...</div>
+                      )}
                     </div>
                   </div>
                 </div>

@@ -295,14 +295,14 @@ export default function SummaryStep({
     if (likedColleges.length === 0) {
       // Fallback data if no colleges are liked
       return [
-        { university: "Salford", rate: 95, salary: 28000 },
-        { university: "Coventry", rate: 89, salary: 26500 },
-        { university: "Dundee", rate: 92, salary: 29200 },
+        { university: "University of Salford", rate: 95, salary: 28000 },
+        { university: "Coventry University", rate: 89, salary: 26500 },
+        { university: "University of Dundee", rate: 92, salary: 29200 },
       ]
     }
 
     return likedColleges.map((college, index) => ({
-      university: college.name.split(" ").pop() || college.name, // Get last word of university name
+      university: college.name, // Use full name
       rate: index === 0 ? 95 : index === 1 ? 89 : 92,
       salary: index === 0 ? 28000 : index === 1 ? 26500 : 29200,
     }))
@@ -535,7 +535,9 @@ export default function SummaryStep({
                         </div>
                         <div>
                           <p className="text-xs text-gray-600 mb-1">Ranking</p>
-                          <p className="font-semibold text-gray-900 text-sm">{details.qsRanking}</p>
+                          <p className="font-semibold text-gray-900 text-sm">
+                            {college.ranking ? `Rank #${college.ranking}` : (details.qsRanking || "N/A")}
+                          </p>
                         </div>
                       </div>
 
@@ -754,7 +756,7 @@ export default function SummaryStep({
                   <div className="mt-4 grid grid-cols-3 gap-2 text-center">
                     {employmentData.map((item, index) => (
                       <div key={index} className="bg-orange-50 rounded-lg p-2">
-                        <div className="text-xs font-medium text-orange-800">{item.university && item.university !== 'University' ? item.university : (employmentData[index]?.university || 'N/A')}</div>
+                        <div className="text-xs font-medium text-orange-800">{item.university}</div>
                         <div className="text-sm font-bold text-orange-900">£{(item.salary / 1000).toFixed(0)}K</div>
                         <div className="text-xs text-green-600">{typeof item.rate === 'number' && !isNaN(item.rate) ? `${item.rate}% employed` : '0% employed'}</div>
                       </div>

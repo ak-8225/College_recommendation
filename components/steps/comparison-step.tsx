@@ -5,7 +5,7 @@ import { ArrowLeft, Target, TrendingUp, DollarSign, Award, Filter, Info, Heart }
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { useEffect, useState } from "react"
+import { useState, useEffect } from "react"
 import type { Step, College } from "@/types/college"
 
 interface ComparisonStepProps {
@@ -33,6 +33,39 @@ export default function ComparisonStep({
   // New: State to store fetched metrics for each college
   const [comparisonMetrics, setComparisonMetrics] = useState<{ [collegeId: string]: string | null }>({})
   const [metricsLoading, setMetricsLoading] = useState<{ [collegeId: string]: boolean }>({})
+  // Add a helper to validate tuition fee (copied from ResultsStep)
+  function isTuitionFeeInvalid(fee: any) {
+    if (!fee) return true;
+    const num = parseFloat(String(fee).replace(/[^\d.]/g, ""));
+    // Consider invalid if missing, zero, or less than ₹50,000/year
+    return isNaN(num) || num < 50000;
+  }
+  // Add state for fallback tuition fees (to sync with ResultsStep logic)
+  const [fallbackTuitionFees, setFallbackTuitionFees] = useState<{ [collegeId: string]: string }>({});
+
+  useEffect(() => {
+    colleges.forEach((college) => {
+      if (isTuitionFeeInvalid(college.tuitionFee) && !fallbackTuitionFees[college.id]) {
+        fetch("/api/get-comparison-metrics", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ college: college.name }),
+        })
+          .then(async (res) => {
+            if (!res.ok) throw new Error(await res.text());
+            return res.json();
+          })
+          .then((data) => {
+            const metricsText = data.metrics || "";
+            const match = metricsText.match(/Annual Tuition Fees.*?:\s*([\d,\.]+)[^\d]*/i);
+            if (match && match[1]) {
+              setFallbackTuitionFees((prev) => ({ ...prev, [college.id]: match[1] }));
+            }
+          })
+          .catch(() => {});
+      }
+    });
+  }, [colleges, fallbackTuitionFees]);
 
   const themes = {
     all: {
@@ -98,6 +131,65 @@ export default function ComparisonStep({
       }
     })
   }, [selectedColleges])
+
+  // Add getCostInfo from results-step.tsx for Google Sheet data
+  function getCostInfo(college: any) {
+    // This logic is copied from results-step.tsx
+    if (!(window as any)._costData) return null;
+    function norm(str: string) {
+      return String(str || '').replace(/\s+/g, '').replace(/[-_]/g, '').toLowerCase();
+    }
+    const countryMap: { [key: string]: string } = {
+      uk: 'UK',
+      ireland: 'Ireland',
+      usa: 'USA',
+      canada: 'Canada',
+      germany: 'Germany',
+      newzealand: 'NewZealand',
+    };
+    const countryKey = norm(college.country);
+    const sheetCountry = countryMap[countryKey] || college.country;
+    let category = '';
+    if (sheetCountry === 'UK') {
+      if (college.campus && /london/i.test(college.campus)) category = 'LONDON';
+      else category = 'NON_LONDON';
+    } else if (sheetCountry === 'Ireland') {
+      if (college.campus && /dublin/i.test(college.campus)) category = 'DUBLIN';
+      else category = 'NON_DUBLIN';
+    } else if (sheetCountry === 'USA') {
+      if (college.campus && /(ny|new york|san francisco|san jose|bay area|nysan)/i.test(college.campus)) category = 'NYSAN';
+      else category = 'NON_NY_SAN';
+    } else if (sheetCountry === 'Canada') {
+      if (college.campus && /(toronto|vancouver|tor_van)/i.test(college.campus)) category = 'TOR_VAN';
+      else category = 'NON_TOR_VAN';
+    } else if (sheetCountry === 'Germany') {
+      if (college.campus && /(berlin|munich|ber_mun)/i.test(college.campus)) category = 'BER_MUN';
+      else category = 'NON_BER_MUN';
+    } else if (sheetCountry === 'NewZealand') {
+      if (college.campus && /(auckland|wellington|auc_well)/i.test(college.campus)) category = 'AUC_WELL';
+      else category = 'NON_AUC_WELL';
+    }
+    const byCountryCat = (window as any)._costData.find((row: any) => norm(row.country_name) === norm(sheetCountry) && norm(row.country_category) === norm(category));
+    if (byCountryCat) return byCountryCat;
+    const byCountry = (window as any)._costData.find((row: any) => norm(row.country_name) === norm(sheetCountry));
+    return byCountry || null;
+  }
+
+  // In useEffect or top-level, fetch and cache the cost data if not already present
+  if (typeof window !== 'undefined' && !(window as any)._costData) {
+    fetch('https://docs.google.com/spreadsheets/d/e/2PACX-1vRIiXlBnG9Vh2Gkvwnz4FDwE-aD1gpB3uWNtsUgrk5HV5Jd89KM5V0Jeb0It7867pbGSt8iD-UvmJIE/pub?output=csv')
+      .then((res) => res.text())
+      .then((csv) => {
+        (window as any).Papa = (window as any).Papa || require('papaparse');
+        (window as any).Papa.parse(csv, {
+          header: true,
+          skipEmptyLines: true,
+          complete: (results: { data: any[] }) => {
+            (window as any)._costData = results.data;
+          },
+        });
+      });
+  }
 
   // Get employment data based on QS Graduate Employability Rankings and university career services data
   const getEmploymentData = (collegeName: string) => {
@@ -384,15 +476,6 @@ export default function ComparisonStep({
         methodology: "Official enrollment statistics from Higher Education Statistics Agency UK",
         type: "percentage_higher_better",
       },
-      {
-        label: "Faculty-to-Student Ratio",
-        values: selectedColleges.map((college) => getFacultyRatio(college.name)),
-        source: "University Official Academic Reports & QS World University Rankings 2024",
-        description: "Ratio of faculty members to students",
-        methodology:
-          "Full-time equivalent faculty divided by total student enrollment from university reports and QS data",
-        type: "ratio_lower_better",
-      },
     ],
   }
 
@@ -433,7 +516,11 @@ export default function ComparisonStep({
     if (type === "percentage_higher_better" || type === "score_higher_better") {
       return Number.parseFloat(value.replace(/[^\d.]/g, "")) === bestValue
     } else if (type === "currency_lower_better") {
-      return Number.parseFloat(value.replace(/[^\d.]/g, "")) === bestValue
+      // Only highlight the single minimum value (first occurrence)
+      const numericValues = values.map((v) => Number.parseFloat(v.replace(/[^\d.]/g, "")));
+      const min = Math.min(...numericValues.filter((n) => !isNaN(n) && n > 0));
+      const idx = numericValues.findIndex((n) => n === min);
+      return Number.parseFloat(value.replace(/[^\d.]/g, "")) === min && values.indexOf(value) === idx;
     } else if (type === "ranking_lower_better") {
       if (value === "N/A") return false
       if (value.includes("-")) {
@@ -490,7 +577,6 @@ export default function ComparisonStep({
     "Student Satisfaction Score": "National Student Survey / University Surveys",
     "Research Quality Rating": "Research Excellence Framework / National Research Assessment",
     "International Student Ratio": "HESA / University Enrollment Data",
-    "Faculty-to-Student Ratio": "University Academic Reports / QS Rankings",
   }
 
   // Helper to get currency symbol by country
@@ -661,19 +747,94 @@ export default function ComparisonStep({
 
   // Update metricFormats to accept college as argument for cost metrics
   const metricFormats: { [label: string]: (value: string, college?: any) => string } = {
-    "Industry Network Score": (v) => /\d+$/.test(v) ? v + "/10" : v,
+    "Industry Network Score": (v) => {
+      // Extract the numeric part
+      const num = parseFloat(v.replace(/[^\d.]/g, ""));
+      if (isNaN(num)) return "N/A";
+      if (num > 0 && num <= 10) return num.toFixed(1).replace(/\.0$/, "") + "/10";
+      if (num > 10 && num <= 100 && num % 10 === 0) return (num / 10).toFixed(1).replace(/\.0$/, "") + "/10";
+      if (num > 10 && num < 20) return (num / 10).toFixed(1).replace(/\.0$/, "") + "/10";
+      return "N/A";
+    },
     "Student Satisfaction Score": (v) => /\d+$/.test(v) ? v + "/100" : v,
-    "Research Quality Rating": (v) => /\d+$/.test(v) ? v + "/10" : v,
+    "Research Quality Rating": (v) => {
+      // Extract the numeric part
+      const num = parseFloat(v.replace(/[^\d.]/g, ""));
+      if (isNaN(num)) return "N/A";
+      if (num > 0 && num <= 10) return num.toFixed(1).replace(/\.0$/, "") + "/10";
+      if (num > 10 && num <= 100 && num % 10 === 0) return (num / 10).toFixed(1).replace(/\.0$/, "") + "/10";
+      if (num > 10 && num < 20) return (num / 10).toFixed(1).replace(/\.0$/, "") + "/10";
+      return "N/A";
+    },
     "Graduate Employability Rate": (v) => /\d+$/.test(v) ? v + "%" : v,
     "Career Progression Rate": (v) => /\d+$/.test(v) ? v + "%" : v,
-    "International Student Ratio": (v) => /\d+$/.test(v) ? v + "%" : v,
+    "International Student Ratio": (v) => {
+      // If already in ratio format, return as is
+      if (/\d+:\d+/.test(v)) return v;
+      // If percentage, convert to ratio (e.g., 25% -> 1:4)
+      const percent = parseFloat(v.replace(/[^\d.]/g, ""));
+      if (!isNaN(percent) && percent > 0 && percent < 100) {
+        const ratio = Math.round(100 / percent);
+        return `1:${ratio}`;
+      }
+      return "N/A";
+    },
     "Scholarship Availability": (v) => /\d+$/.test(v) ? v + "%" : v,
+    // Always display Average Starting Salary in USD
+    "Average Starting Salary": (v) => {
+      let num = v.replace(/[^\d.,]/g, "");
+      if (!num) return "$0";
+      // Add commas for thousands
+      num = Number(num.replace(/,/g, "")).toLocaleString();
+      return `$${num}`;
+    },
     // Use country-specific currency for cost metrics
-    "Accommodation Costs": (v, college) => v && !v.match(/[₹£$€C$A$NZ$]/) ? `${getCurrencySymbol(college?.country)}${v}` : v,
-    "Transportation Costs": (v, college) => v && !v.match(/[₹£$€C$A$NZ$]/) ? `${getCurrencySymbol(college?.country)}${v}` : v,
-    "Living Costs (Annual)": (v, college) => v && !v.match(/[₹£$€C$A$NZ$]/) ? `${getCurrencySymbol(college?.country)}${v}` : v,
-    "Annual Tuition Fees": (v, college) => v && !v.match(/[₹£$€C$A$NZ$]/) ? `${getCurrencySymbol(college?.country)}${v}` : v,
-    "Total Cost of Study": (v, college) => v && !v.match(/[₹£$€C$A$NZ$]/) ? `${getCurrencySymbol(college?.country)}${v}` : v,
+    "Accommodation Costs": (v, college) => {
+      // Use Google Sheet data for accommodation
+      if (typeof getCostInfo === 'function') {
+        const costInfo = getCostInfo(college);
+        if (costInfo && costInfo.accommodation) {
+          return `₹${costInfo.accommodation} /month`;
+        }
+      }
+      return '';
+    },
+    "Transportation Costs": (v, college) => {
+      // Use Google Sheet data for transportation
+      if (typeof getCostInfo === 'function') {
+        const costInfo = getCostInfo(college);
+        if (costInfo && costInfo.transportation) {
+          return `₹${costInfo.transportation} /month`;
+        }
+      }
+      return '';
+    },
+    "Living Costs (Annual)": (v, college) => {
+      // Use Google Sheet data for living_expense
+      if (typeof getCostInfo === 'function') {
+        const costInfo = getCostInfo(college);
+        if (costInfo && costInfo.living_expense) {
+          return `₹${costInfo.living_expense} /month`;
+        }
+      }
+      return '';
+    },
+    "Annual Tuition Fees": (v, college) => {
+      let fee = college?.tuitionFee || v;
+      if (isTuitionFeeInvalid(fee) && fallbackTuitionFees[college.id]) {
+        fee = fallbackTuitionFees[college.id];
+      }
+      if (!fee || isTuitionFeeInvalid(fee)) fee = "Approx. ₹8,00,000";
+      // Always show as in the card: ₹X INR per year
+      return `₹${String(fee).replace(/[^\d.]/g, "")} INR per year`;
+    },
+    "Total Cost of Study": (v, college) => {
+      // Remove all currency symbols and format as $X,XXX
+      let num = v.replace(/[^\d.]/g, "");
+      if (!num) return "";
+      num = Number(num.replace(/,/g, "")).toLocaleString();
+      return `$${num}`;
+    },
   }
 
   // 1. Compute best metrics count for each college
