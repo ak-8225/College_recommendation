@@ -138,9 +138,12 @@ export default function ResultsStep({
   const [hoveredCollege, setHoveredCollege] = useState<string | null>(null)
   const [usps, setUsps] = useState<{ [collegeId: string]: string }>({})
   const [uspsLoading, setUspsLoading] = useState<{ [collegeId: string]: boolean }>({})
+  const [roiData, setRoiData] = useState<{ [collegeId: string]: number }>({})
+  const [roiLoading, setRoiLoading] = useState<{ [collegeId: string]: boolean }>({})
 
   useEffect(() => {
     colleges.forEach((college) => {
+      // Fetch USPs
       if (!usps[college.id] && !uspsLoading[college.id]) {
         setUspsLoading((prev) => ({ ...prev, [college.id]: true }))
         fetch(`/api/get-usps-google?college=${encodeURIComponent(college.name)}`)
@@ -178,6 +181,48 @@ export default function ResultsStep({
           })
           .finally(() => {
             setUspsLoading((prev) => ({ ...prev, [college.id]: false }))
+          })
+      }
+
+      // Fetch ROI data
+      if (!roiData[college.id] && !roiLoading[college.id]) {
+        setRoiLoading((prev) => ({ ...prev, [college.id]: true }))
+        
+        const details = getCollegeDetails(college);
+        const requestBody = {
+          college: college.name,
+          country: college.country,
+          city: details.location?.split(',')[0] || "",
+          tuitionFee: college.tuitionFee || "₹25.0L",
+          livingCosts: details.livingCosts || "₹12.6L/year",
+          avgSalary: details.averageSalary || "₹26.0L",
+          ranking: details.qsRanking || "N/A",
+          employmentRate: details.employmentRate || "80%"
+        };
+
+        fetch("/api/get-roi", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody),
+        })
+          .then(async (res) => {
+            if (!res.ok) throw new Error(await res.text())
+            return res.json()
+          })
+          .then((data) => {
+            if (data.error) {
+              console.error("ROI API error:", data.error);
+              setRoiData((prev) => ({ ...prev, [college.id]: 3.5 })) // Default fallback
+            } else {
+              setRoiData((prev) => ({ ...prev, [college.id]: data.roi || 3.5 }))
+            }
+          })
+          .catch((err) => {
+            console.error("ROI fetch error:", err);
+            setRoiData((prev) => ({ ...prev, [college.id]: 3.5 })) // Default fallback
+          })
+          .finally(() => {
+            setRoiLoading((prev) => ({ ...prev, [college.id]: false }))
           })
       }
     })
@@ -507,9 +552,6 @@ export default function ResultsStep({
                             </div>
                             <div className="flex items-center gap-1 bg-green-100 text-green-800 px-2 py-0.5 rounded-full text-xs font-medium">
                               ₹{String(college.tuitionFee).replace(/[^\d.]/g, "")} INR per year
-                            </div>
-                            <div className="flex items-center gap-1 bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full text-xs font-medium">
-                              {college.id === "1" ? "3.5 yrs ROI" : college.id === "2" ? "4 yrs ROI" : "5.5 yrs ROI"}
                             </div>
                           </div>
                           <div className="mt-0 mb-0.5">

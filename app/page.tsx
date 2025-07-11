@@ -278,6 +278,8 @@ export default function CollegeFitApp() {
               selectedForComparison={selectedForComparison}
               onNext={handleNext}
               onBack={handleBack}
+              tuitionFees={{}}
+              rankingData={{}}
             />
           )}
 

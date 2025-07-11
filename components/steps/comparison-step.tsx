@@ -493,8 +493,174 @@ export default function ComparisonStep({
     "Faculty-to-Student Ratio": "University Academic Reports / QS Rankings",
   }
 
-  // Mapping for metric display formats/scales
-  const metricFormats: { [label: string]: (value: string) => string } = {
+  // Helper to get currency symbol by country
+  function getCurrencySymbol(country: string) {
+    if (!country) return '₹';
+    const map: { [key: string]: string } = {
+      'India': '₹',
+      'United Kingdom': '£',
+      'UK': '£',
+      'United States': '$',
+      'USA': '$',
+      'Canada': 'C$',
+      'Australia': 'A$',
+      'New Zealand': 'NZ$',
+      'Germany': '€',
+      'France': '€',
+      'Italy': '€',
+      'Spain': '€',
+      'Ireland': '€',
+      'Singapore': 'S$',
+      'UAE': 'د.إ',
+      'Japan': '¥',
+      'China': '¥',
+      'South Korea': '₩',
+      'Switzerland': 'CHF',
+      'Sweden': 'kr',
+      'Norway': 'kr',
+      'Denmark': 'kr',
+      'Finland': '€',
+      'Netherlands': '€',
+      'Belgium': '€',
+      'Austria': '€',
+      'Russia': '₽',
+      'Turkey': '₺',
+      'South Africa': 'R',
+      'Malaysia': 'RM',
+      'Thailand': '฿',
+      'Brazil': 'R$',
+      'Mexico': '$',
+      'Argentina': '$',
+      'Chile': '$',
+      'Poland': 'zł',
+      'Czech Republic': 'Kč',
+      'Hungary': 'Ft',
+      'Israel': '₪',
+      'Saudi Arabia': '﷼',
+      'Qatar': '﷼',
+      'Kuwait': 'د.ك',
+      'Egypt': '£',
+      'Nigeria': '₦',
+      'Kenya': 'KSh',
+      'Ghana': '₵',
+      'Pakistan': '₨',
+      'Bangladesh': '৳',
+      'Sri Lanka': 'Rs',
+      'Nepal': '₨',
+      'Bhutan': 'Nu.',
+      'Maldives': 'Rf.',
+      'Indonesia': 'Rp',
+      'Philippines': '₱',
+      'Vietnam': '₫',
+      'Hong Kong': 'HK$',
+      'Taiwan': 'NT$',
+      'Bahrain': 'BD',
+      'Oman': 'ر.ع.',
+      'Jordan': 'JD',
+      'Lebanon': 'ل.ل',
+      'Morocco': 'د.م.',
+      'Tunisia': 'د.ت',
+      'Algeria': 'دج',
+      'Libya': 'ل.د',
+      'Sudan': 'ج.س.',
+      'Ethiopia': 'Br',
+      'Tanzania': 'TSh',
+      'Uganda': 'USh',
+      'Zambia': 'ZK',
+      'Zimbabwe': 'Z$',
+      'Botswana': 'P',
+      'Namibia': 'N$',
+      'Mozambique': 'MT',
+      'Angola': 'Kz',
+      'Cameroon': 'FCFA',
+      'Senegal': 'CFA',
+      'Ivory Coast': 'CFA',
+      'Gabon': 'CFA',
+      'Congo': 'FC',
+      'DR Congo': 'FC',
+      'Madagascar': 'Ar',
+      'Mauritius': '₨',
+      'Seychelles': '₨',
+      'Reunion': '€',
+      'Mayotte': '€',
+      'Comoros': 'KMF',
+      'Cape Verde': '$',
+      'Guinea': 'FG',
+      'Mali': 'CFA',
+      'Burkina Faso': 'CFA',
+      'Niger': 'CFA',
+      'Togo': 'CFA',
+      'Benin': 'CFA',
+      'Sierra Leone': 'Le',
+      'Liberia': '$',
+      'Gambia': 'D',
+      'Guinea-Bissau': 'CFA',
+      'Equatorial Guinea': 'CFA',
+      'Central African Republic': 'CFA',
+      'Chad': 'CFA',
+      'Djibouti': 'Fdj',
+      'Eritrea': 'Nfk',
+      'Somalia': 'Sh',
+      'Rwanda': 'FRw',
+      'Burundi': 'FBu',
+      'Malawi': 'MK',
+      'Lesotho': 'M',
+      'Swaziland': 'E',
+      'Sao Tome and Principe': 'Db',
+      'Mauritania': 'UM',
+      'Western Sahara': 'MAD',
+      'Palestine': '₪',
+      'Syria': '£',
+      'Iraq': 'ع.د',
+      'Yemen': '﷼',
+      'Afghanistan': '؋',
+      'Iran': '﷼',
+      'Armenia': '֏',
+      'Azerbaijan': '₼',
+      'Georgia': '₾',
+      'Kazakhstan': '₸',
+      'Kyrgyzstan': 'лв',
+      'Tajikistan': 'ЅМ',
+      'Turkmenistan': 'm',
+      'Uzbekistan': 'soʻm',
+      'Mongolia': '₮',
+      'North Korea': '₩',
+      'Laos': '₭',
+      'Cambodia': '៛',
+      'Myanmar': 'K',
+      'East Timor': '$',
+      'Papua New Guinea': 'K',
+      'Fiji': '$',
+      'Samoa': 'T',
+      'Tonga': 'T$',
+      'Vanuatu': 'Vt',
+      'Solomon Islands': 'SI$',
+      'Micronesia': '$',
+      'Palau': '$',
+      'Marshall Islands': '$',
+      'Nauru': '$',
+      'Tuvalu': '$',
+      'Kiribati': '$',
+      'Cook Islands': '$',
+      'Niue': '$',
+      'Tokelau': '$',
+      'Wallis and Futuna': '₣',
+      'French Polynesia': '₣',
+      'New Caledonia': '₣',
+      'Pitcairn Islands': '$',
+      'Norfolk Island': '$',
+      'Christmas Island': '$',
+      'Cocos Islands': '$',
+      'Heard Island and McDonald Islands': '$',
+      'South Georgia and the South Sandwich Islands': '£',
+      'British Antarctic Territory': '£',
+      'Antarctica': '$',
+    };
+    return map[country] || '₹';
+  }
+
+  // Update metricFormats to accept college as argument for cost metrics
+  const metricFormats: { [label: string]: (value: string, college?: any) => string } = {
     "Industry Network Score": (v) => /\d+$/.test(v) ? v + "/10" : v,
     "Student Satisfaction Score": (v) => /\d+$/.test(v) ? v + "/100" : v,
     "Research Quality Rating": (v) => /\d+$/.test(v) ? v + "/10" : v,
@@ -502,8 +668,45 @@ export default function ComparisonStep({
     "Career Progression Rate": (v) => /\d+$/.test(v) ? v + "%" : v,
     "International Student Ratio": (v) => /\d+$/.test(v) ? v + "%" : v,
     "Scholarship Availability": (v) => /\d+$/.test(v) ? v + "%" : v,
-    // Add more as needed
+    // Use country-specific currency for cost metrics
+    "Accommodation Costs": (v, college) => v && !v.match(/[₹£$€C$A$NZ$]/) ? `${getCurrencySymbol(college?.country)}${v}` : v,
+    "Transportation Costs": (v, college) => v && !v.match(/[₹£$€C$A$NZ$]/) ? `${getCurrencySymbol(college?.country)}${v}` : v,
+    "Living Costs (Annual)": (v, college) => v && !v.match(/[₹£$€C$A$NZ$]/) ? `${getCurrencySymbol(college?.country)}${v}` : v,
+    "Annual Tuition Fees": (v, college) => v && !v.match(/[₹£$€C$A$NZ$]/) ? `${getCurrencySymbol(college?.country)}${v}` : v,
+    "Total Cost of Study": (v, college) => v && !v.match(/[₹£$€C$A$NZ$]/) ? `${getCurrencySymbol(college?.country)}${v}` : v,
   }
+
+  // 1. Compute best metrics count for each college
+  const metricsForTheme = getMetricsForTheme();
+  const bestCounts: { [collegeId: string]: number } = {};
+  selectedColleges.forEach((college) => { bestCounts[college.id] = 0; });
+  metricsForTheme.forEach((metric) => {
+    // Gather all values for this metric
+    const values = selectedColleges.map((college) => {
+      const metrics = metricsForColleges[college.id];
+      let value: string | undefined = undefined;
+      if (metrics) {
+        const normLabel = normalizeLabel(metric.label);
+        for (const key in metrics) {
+          if (normalizeLabel(key) === normLabel) {
+            value = metrics[key];
+            if (value && metricFormats[metric.label]) {
+              value = metricFormats[metric.label](value, college);
+            }
+            break;
+          }
+        }
+      }
+      return value ?? "";
+    });
+    // Find the best value(s)
+    const bestValue = getBestValue(values, metric.type);
+    selectedColleges.forEach((college, idx) => {
+      if (isValueBest(values[idx] ?? "", values, metric.type)) {
+        bestCounts[college.id] = (bestCounts[college.id] || 0) + 1;
+      }
+    });
+  });
 
   return (
     <TooltipProvider>
@@ -603,8 +806,14 @@ export default function ComparisonStep({
                           <span className="text-sm flex items-center justify-center gap-1">
                             {college.name}
                             {college.liked && (
-                              <Heart className="w-4 h-4 ml-1 text-red-500 fill-red-500" />
+                              <span className="flex items-center ml-1 h-5">
+                                <Heart className="w-5 h-5 min-w-[20px] min-h-[20px] text-red-500 fill-red-500" />
+                              </span>
                             )}
+                          </span>
+                          {/* Best metrics count */}
+                          <span className="text-xs font-semibold text-green-700 mt-1">
+                            {bestCounts[college.id]}/{metricsForTheme.length} metrics
                           </span>
                         </div>
                       </th>
@@ -612,47 +821,60 @@ export default function ComparisonStep({
                   </tr>
                 </thead>
                 <tbody>
-                  {metricLabels.map((label, rowIdx) => (
-                    <tr key={label} className={`border-b hover:bg-gray-50/50 ${rowIdx % 2 === 0 ? "bg-white" : ""}`}>
+                  {metricsForTheme.map((metric, rowIdx) => (
+                    <tr key={metric.label} className={`border-b hover:bg-gray-50/50 ${rowIdx % 2 === 0 ? "bg-white" : ""}`}>
                       <td className="sticky left-0 z-20 bg-white p-4">
-                        <span className="font-medium text-gray-900 flex items-center gap-2">
-                          {label}
+                        <span className="font-medium text-gray-900 flex items-center gap-2 relative">
+                          {metric.label}
                           <Tooltip>
                             <TooltipTrigger>
                               <Info className="w-4 h-4 text-gray-400 hover:text-gray-600" />
                             </TooltipTrigger>
-                            <TooltipContent className="max-w-xs">
-                              <span className="text-xs text-gray-700">{metricSources[label] || "Estimated from regional averages / OpenAI"}</span>
+                            <TooltipContent className="max-w-xs" side="bottom">
+                              <span className="text-xs text-gray-700">{metricSources[metric.label] || "Estimated from regional averages / OpenAI"}</span>
                             </TooltipContent>
                           </Tooltip>
                         </span>
                       </td>
-                      {selectedColleges.map((college) => {
-                        const loading = metricsLoading[college.id]
-                        const metrics = metricsForColleges[college.id]
-                        // Debug: log the metrics object, label, and keys
+                      {selectedColleges.map((college, idx) => {
+                        const loading = metricsLoading[college.id];
+                        const metrics = metricsForColleges[college.id];
+                        let value = undefined;
                         if (metrics) {
-                          console.log('DEBUG metrics:', metrics, 'label:', label, 'keys:', Object.keys(metrics))
-                        }
-                        // Normalize label for matching
-                        let value = undefined
-                        if (metrics) {
-                          const normLabel = normalizeLabel(label)
+                          const normLabel = normalizeLabel(metric.label);
                           for (const key in metrics) {
                             if (normalizeLabel(key) === normLabel) {
-                              value = metrics[key]
-                              // Apply metric format if available
-                              if (value && metricFormats[label]) {
-                                value = metricFormats[label](value)
+                              value = metrics[key];
+                              if (value && metricFormats[metric.label]) {
+                                value = metricFormats[metric.label](value, college);
                               }
-                              break
+                              break;
                             }
                           }
                         }
-                        if (loading) value = "Loading..."
+                        if (loading) value = "Loading...";
                         if (!value && !loading) {
-                          value = "N/A"
+                          value = "N/A";
                         }
+                        // Highlight if this is the best value
+                        const values = selectedColleges.map((c) => {
+                          const m = metricsForColleges[c.id];
+                          let v: string | undefined = undefined;
+                          if (m) {
+                            const normLabel = normalizeLabel(metric.label);
+                            for (const key in m) {
+                              if (normalizeLabel(key) === normLabel) {
+                                v = m[key];
+                                if (v && metricFormats[metric.label]) {
+                                  v = metricFormats[metric.label](v, college);
+                                }
+                                break;
+                              }
+                            }
+                          }
+                          return v ?? "";
+                        });
+                        const isBest = isValueBest((value ?? "") as string, values, metric.type);
                         return (
                           <td key={college.id} className="p-4 text-center">
                             <span
@@ -660,14 +882,16 @@ export default function ComparisonStep({
                                 value === "Loading..."
                                   ? "bg-gray-100 text-gray-400"
                                   : value !== "N/A"
-                                  ? "bg-gray-100 text-green-800 border border-green-200"
+                                  ? isBest
+                                    ? "bg-green-100 text-green-900 border-2 border-green-400 shadow"
+                                    : "bg-gray-100 text-green-800 border border-green-200"
                                   : "bg-gray-100 text-gray-800"
                               }`}
                             >
                               {value}
                             </span>
                           </td>
-                        )
+                        );
                       })}
                     </tr>
                   ))}

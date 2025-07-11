@@ -403,7 +403,7 @@ export default function InitialFormStep({
     return (parseResult.data as any[])
       .map((row: any) => {
         const profile: UserProfile = {
-          phoneNumber: row["phoneNumber"] || "",
+          phoneNumber: row["Pre Login Leap User - Pre User → Phone"] || "",
           name: row["name"] || "",
           email: row["email"] || "",
           collegeName: row["Counsellor Recommendation - Pre User → College Name"] || "",

@@ -13,7 +13,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Line, 
 import { TooltipProvider } from "@/components/ui/tooltip"
 import type { Step, College } from "@/types/college"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { toast } from "@/hooks/use-toast"
 import LeapStyleSummaryPDF from "./LeapStyleSummaryPDF";
 
@@ -267,6 +267,8 @@ export default function SummaryStep({
 }: SummaryStepProps) {
   const [shareUrl, setShareUrl] = useState<string>("")
   const summaryRef = useRef<HTMLDivElement>(null) as React.RefObject<HTMLDivElement>
+  const [collegeRoiData, setCollegeRoiData] = useState<{ [collegeId: string]: number }>({})
+  const [roiLoading, setRoiLoading] = useState<{ [collegeId: string]: boolean }>({})
 
   // Get liked colleges
   const likedColleges = colleges.filter((college) => college.liked)
@@ -305,6 +307,52 @@ export default function SummaryStep({
       salary: index === 0 ? 28000 : index === 1 ? 26500 : 29200,
     }))
   }
+
+  // Fetch ROI data for liked colleges
+  useEffect(() => {
+    likedColleges.forEach((college) => {
+      if (!collegeRoiData[college.id] && !roiLoading[college.id]) {
+        setRoiLoading((prev) => ({ ...prev, [college.id]: true }))
+        
+        const details = getCollegeDetails(college);
+        const requestBody = {
+          college: college.name,
+          country: college.country,
+          city: details.location?.split(',')[0] || "",
+          tuitionFee: college.tuitionFee || "₹25.0L",
+          livingCosts: details.livingCosts || "₹12.6L/year",
+          avgSalary: details.averageSalary || "₹26.0L",
+          ranking: details.qsRanking || "N/A",
+          employmentRate: details.employmentRate || "80%"
+        };
+
+        fetch("/api/get-roi", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody),
+        })
+          .then(async (res) => {
+            if (!res.ok) throw new Error(await res.text())
+            return res.json()
+          })
+          .then((data) => {
+            if (data.error) {
+              console.error("ROI API error:", data.error);
+              setCollegeRoiData((prev) => ({ ...prev, [college.id]: 3.5 })) // Default fallback
+            } else {
+              setCollegeRoiData((prev) => ({ ...prev, [college.id]: data.roi || 3.5 }))
+            }
+          })
+          .catch((err) => {
+            console.error("ROI fetch error:", err);
+            setCollegeRoiData((prev) => ({ ...prev, [college.id]: 3.5 })) // Default fallback
+          })
+          .finally(() => {
+            setRoiLoading((prev) => ({ ...prev, [college.id]: false }))
+          })
+      }
+    })
+  }, [likedColleges])
 
   const roiData = generateROIData()
   const employmentData = generateEmploymentData()
@@ -469,7 +517,7 @@ export default function SummaryStep({
                       <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-200">
                         <div>
                           <p className="text-xs text-gray-600 mb-1">Tuition Fee</p>
-                          <p className="font-semibold text-gray-900 text-sm">{details.tuitionFees}</p>
+                          <p className="font-semibold text-gray-900 text-sm">{details.tuitionFees && !details.tuitionFees.includes('₹') ? `₹${details.tuitionFees}` : details.tuitionFees}</p>
                         </div>
                         <div>
                           <p className="text-xs text-gray-600 mb-1">Avg Package</p>
@@ -477,7 +525,13 @@ export default function SummaryStep({
                         </div>
                         <div>
                           <p className="text-xs text-gray-600 mb-1">Break-even</p>
-                          <p className="font-semibold text-green-600 text-sm">{(3.2 + index * 0.3).toFixed(1)} Years</p>
+                          <p className="font-semibold text-green-600 text-sm">
+                            {roiLoading[college.id] ? (
+                              "Loading..."
+                            ) : (
+                              `${collegeRoiData[college.id]?.toFixed(1) || (3.2 + index * 0.3).toFixed(1)} Years`
+                            )}
+                          </p>
                         </div>
                         <div>
                           <p className="text-xs text-gray-600 mb-1">Ranking</p>
@@ -485,16 +539,7 @@ export default function SummaryStep({
                         </div>
                       </div>
 
-                      <div className="flex flex-wrap gap-1 pt-2">
-                        {college.tags && college.tags.slice(0, 2).map((tag, tagIndex) => (
-                          <span
-                            key={tagIndex}
-                            className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-full font-medium"
-                          >
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
+                      {/* Removed campus/moderate tags as requested */}
                     </div>
                   </Card>
                 );
@@ -622,8 +667,8 @@ export default function SummaryStep({
                   {/* Visual indicators below chart */}
                   <div className="mt-4 grid grid-cols-3 gap-2 text-center">
                     {roiData.map((item, index) => (
-                      <div key={index} className="bg-blue-50 rounded-lg p-2">
-                        <div className="text-xs font-medium text-blue-800">{item.name.split(" ").pop()}</div>
+                      <div key={index} className="bg-blue-50 rounded-lg p-2 flex flex-col items-center">
+                        <div className="text-xs font-medium text-blue-800 mb-1">{item.name}</div>
                         <div className="text-lg font-bold text-blue-900">{item.roi.toFixed(1)} yrs</div>
                       </div>
                     ))}
@@ -636,7 +681,7 @@ export default function SummaryStep({
                 <CardHeader className="px-0 pt-0 pb-4">
                   <CardTitle className="flex items-center gap-2 text-lg">
                     <Users className="w-5 h-5 text-green-600" />
-                    Employment Rate vs Starting Salary
+                    Employment Rate and Starting Salary
                   </CardTitle>
                   <p className="text-sm text-gray-600">
                     Career outcomes for your {likedColleges.length > 0 ? "liked" : "recommended"} universities
@@ -652,6 +697,7 @@ export default function SummaryStep({
                           tick={{ fontSize: 12, fill: "#666" }}
                           axisLine={false}
                           tickLine={false}
+                          label={{ value: "", position: "insideBottom", offset: -20, fontSize: 13, fill: "#333" }}
                         />
                         <YAxis
                           yAxisId="left"
@@ -659,6 +705,7 @@ export default function SummaryStep({
                           axisLine={false}
                           tickLine={false}
                           domain={[80, 100]}
+                          label={{ value: "Employment Rate (%)", angle: -90, position: "insideLeft", fontSize: 13, fill: "#10B981" }}
                         />
                         <YAxis
                           yAxisId="right"
@@ -667,19 +714,22 @@ export default function SummaryStep({
                           axisLine={false}
                           tickLine={false}
                           domain={[25000, 30000]}
+                          label={{ value: "Starting Salary (£)", angle: 90, position: "insideRight", fontSize: 13, fill: "#F59E0B" }}
                         />
                         <ChartTooltip
                           content={({ active, payload, label }) => {
                             if (active && payload && payload.length) {
+                              const emp = payload.find((p) => p.dataKey === "rate")?.value;
+                              const sal = payload.find((p) => p.dataKey === "salary")?.value;
+                              const uni = label && label !== 'University' ? label : (payload[0]?.payload?.university || 'N/A');
                               return (
                                 <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg">
-                                  <p className="font-medium text-gray-900">{label}</p>
+                                  <p className="font-medium text-gray-900">{uni}</p>
                                   <p className="text-green-600 font-semibold">
-                                    Employment Rate: {payload.find((p) => p.dataKey === "rate")?.value}%
+                                    Employment Rate: {emp !== undefined && emp !== null && emp !== '' ? `${emp}%` : '0%'}
                                   </p>
                                   <p className="text-orange-600 font-semibold">
-                                    Starting Salary: £
-                                    {payload.find((p) => p.dataKey === "salary")?.value?.toLocaleString()}
+                                    Starting Salary: £{sal !== undefined && sal !== null && sal !== '' ? sal.toLocaleString() : '0'}
                                   </p>
                                 </div>
                               )
@@ -704,9 +754,9 @@ export default function SummaryStep({
                   <div className="mt-4 grid grid-cols-3 gap-2 text-center">
                     {employmentData.map((item, index) => (
                       <div key={index} className="bg-orange-50 rounded-lg p-2">
-                        <div className="text-xs font-medium text-orange-800">{item.university}</div>
+                        <div className="text-xs font-medium text-orange-800">{item.university && item.university !== 'University' ? item.university : (employmentData[index]?.university || 'N/A')}</div>
                         <div className="text-sm font-bold text-orange-900">£{(item.salary / 1000).toFixed(0)}K</div>
-                        <div className="text-xs text-green-600">{item.rate}% employed</div>
+                        <div className="text-xs text-green-600">{typeof item.rate === 'number' && !isNaN(item.rate) ? `${item.rate}% employed` : '0% employed'}</div>
                       </div>
                     ))}
                   </div>
