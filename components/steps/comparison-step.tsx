@@ -781,11 +781,41 @@ export default function ComparisonStep({
     },
     "Scholarship Availability": (v) => /\d+$/.test(v) ? v + "%" : v,
     // Always display Average Starting Salary in USD
-    "Average Starting Salary": (v) => {
-      let num = v.replace(/[^\d.,]/g, "");
-      if (!num) return "$0";
+    "Average Starting Salary": (v, college) => {
+      // 1. Prefer college.avgSalary or college.avgPackage if present and valid
+      let raw = (college && (college.avgSalary || college.avgPackage)) || v;
+      let num = raw ? raw.replace(/[^\d.,]/g, "") : "";
+      let value = Number(num.replace(/,/g, ""));
+      // Only show values between $10,000 and $200,000
+      if (isNaN(value) || value < 10000 || value > 200000) {
+        // 2. Try to get fallback from getSalaryData
+        let fallback = '';
+        if (typeof getSalaryData === 'function' && college && college.name) {
+          fallback = getSalaryData(college.name);
+          let fallbackNum = fallback.replace(/[^\d.,]/g, "");
+          let fallbackValue = Number(fallbackNum.replace(/,/g, ""));
+          if (!isNaN(fallbackValue) && fallbackValue >= 10000 && fallbackValue <= 200000) {
+            value = fallbackValue;
+          } else {
+            // 3. Use country average if fallback is also invalid
+            const countryAvg = getCountryAverageSalary(college.country);
+            if (countryAvg) {
+              value = countryAvg;
+            } else {
+              value = 0; // Show $0 if nothing is available
+            }
+          }
+        } else {
+          const countryAvg = getCountryAverageSalary(college.country);
+          if (countryAvg) {
+            value = countryAvg;
+          } else {
+            value = 0;
+          }
+        }
+      }
       // Add commas for thousands
-      num = Number(num.replace(/,/g, "")).toLocaleString();
+      num = value.toLocaleString();
       return `$${num}`;
     },
     // Use country-specific currency for cost metrics
@@ -1082,4 +1112,22 @@ export default function ComparisonStep({
       </motion.div>
     </TooltipProvider>
   )
+}
+
+// Helper to get average starting salary by country
+function getCountryAverageSalary(country: string): number | null {
+  const countrySalaryMap: Record<string, number> = {
+    UK: 26000,
+    USA: 52000,
+    Canada: 42000,
+    Germany: 38000,
+    Ireland: 35000,
+    NewZealand: 34000,
+  };
+  // Normalize country string
+  const norm = (str: string) => String(str || '').replace(/\s+/g, '').replace(/[^a-zA-Z]/g, '').toLowerCase();
+  const key = Object.keys(countrySalaryMap).find(
+    (c) => norm(c) === norm(country)
+  );
+  return key ? countrySalaryMap[key] : null;
 }

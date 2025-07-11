@@ -175,7 +175,16 @@ const LeapStyleSummaryPDF: React.FC<LeapStyleSummaryPDFProps> = ({
                 </div>
                 <div>
                   <div style={{ fontSize: 12, color: '#64748b' }}>Avg Package</div>
-                  <div style={{ fontWeight: 600, fontSize: 15, color: '#222' }}>{col.avgSalary || col.avgPackage || 'N/A'}</div>
+                  <div style={{ fontWeight: 600, fontSize: 15, color: '#222' }}>{
+                    (() => {
+                      let val = col.avgSalary || col.avgPackage;
+                      // If missing or clearly invalid, use fallback
+                      if (!val || val === 'N/A' || val === 'NA' || val === '-') {
+                        val = '₹26.0L';
+                      }
+                      return val;
+                    })()
+                  }</div>
                 </div>
                 <div>
                   <div style={{ fontSize: 12, color: '#64748b' }}>Break-even</div>

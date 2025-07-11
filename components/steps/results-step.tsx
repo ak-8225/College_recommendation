@@ -36,6 +36,7 @@ interface ResultsStepProps {
     name: string
     intendedMajor: string
     country: string
+    phone: string
   }
   onNext: (step: Step) => void
   onBack: () => void
@@ -284,7 +285,9 @@ export default function ResultsStep({
       })
     }
 
-    if (!userNameLoaded) {
+    // In ResultsStep, get phone from userProfile
+    const phone = userProfile?.phone || ""
+    if (!userNameLoaded && phone) {
       fetch('https://docs.google.com/spreadsheets/d/e/2PACX-1vRQtjtY6NkC6LSKa_vEVbwjfoMVUnkGpZp0Q1mpmtJEDx-KXgBLGlmTTOin-VB6ycISSIaISUVOcKin/pub?output=csv')
         .then((res) => res.text())
         .then((csv) => {
@@ -292,10 +295,27 @@ export default function ResultsStep({
             header: true,
             skipEmptyLines: true,
             complete: (results: any) => {
-              // Find the first row with the user name column
-              const row = results.data.find((r: any) => r["Pre Login Leap User - Pre User → Name"])
+              console.log('userProfile.phone:', phone)
+              console.log('Parsed CSV data type:', typeof results.data, 'length:', results.data.length)
+              // Normalize phone numbers for comparison
+              const normalize = (str: string) => String(str || '').replace(/\D/g, '').trim()
+              const userPhoneNorm = normalize(phone)
+              // Find the row where the phone matches (normalized)
+              const row = results.data.find((r: any) => normalize(r["Pre Login Leap User - Pre User → Phone"]) === userPhoneNorm)
               if (row) {
+                console.log('Matched row:', row)
                 setUserName(row["Pre Login Leap User - Pre User → Name"])
+              } else {
+                // Debug: log first few phone numbers and names
+                const allPhones = results.data.map((r: any) => normalize(r["Pre Login Leap User - Pre User → Phone"]))
+                const allNames = results.data.map((r: any) => r["Pre Login Leap User - Pre User → Name"])
+                console.log('No match found. First 10 phones:', allPhones.slice(0, 10))
+                console.log('First 10 names:', allNames.slice(0, 10))
+                // Fallback: use the first available name
+                const firstRow = results.data.find((r: any) => r["Pre Login Leap User - Pre User → Name"])
+                if (firstRow) {
+                  setUserName(firstRow["Pre Login Leap User - Pre User → Name"])
+                }
               }
               setUserNameLoaded(true)
             },
@@ -304,7 +324,7 @@ export default function ResultsStep({
       .catch(() => setUserNameLoaded(true))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [colleges])
+  }, [colleges, userNameLoaded, userProfile?.phone])
 
   // Cache for college USPs to keep them constant
   const collegeUSPsCache = useRef<{ [collegeId: string]: string[] }>({})

@@ -462,6 +462,19 @@ export default function SummaryStep({
     });
   };
 
+  // Add a helper to format the range
+  function formatBreakEvenRange(value: number) {
+    if (value < 4) {
+      const min = (value - 0.7).toFixed(1)
+      const max = (value + 0.3).toFixed(1)
+      return `${min} - ${max} Years`
+    } else {
+      const min = Math.floor(value)
+      const max = Math.ceil(value)
+      return `${min} - ${max} Years`
+    }
+  }
+
   return (
     <TooltipProvider>
       {/* Header - Outside of PDF capture */}
@@ -558,7 +571,7 @@ export default function SummaryStep({
                             {roiLoading[college.id] ? (
                               "Loading..."
                             ) : (
-                              `${collegeRoiData[college.id]?.toFixed(1) || (3.2 + index * 0.3).toFixed(1)} Years`
+                              `${formatBreakEvenRange(collegeRoiData[college.id] || (3.2 + index * 0.3))}`
                             )}
                           </p>
                         </div>
@@ -588,7 +601,7 @@ export default function SummaryStep({
               </div>
               <div>
                 <p className="text-sm text-blue-700 font-medium">Avg Break-even</p>
-                <p className="text-2xl font-bold text-blue-900">3.2 Years</p>
+                <p className="text-2xl font-bold text-blue-900">2.5 - 3.5 Years</p>
               </div>
             </div>
           </Card>
