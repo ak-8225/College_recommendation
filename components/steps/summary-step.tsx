@@ -16,79 +16,7 @@ import type { Step, College } from "@/types/college"
 import { useState, useRef, useEffect } from "react"
 import { toast } from "@/hooks/use-toast"
 import LeapStyleSummaryPDF from "./LeapStyleSummaryPDF";
-
-// Replace the generatePDF function to render LeapStyleSummaryPDF to a hidden div, capture it, and export as PDF
-const generatePDF = async (formData: any, colleges: any, summaryRef: React.RefObject<HTMLDivElement>) => {
-  const html2canvas = (await import("html2canvas")).default;
-  const jsPDF = (await import("jspdf")).default;
-
-  // Prepare data for LeapStyleSummaryPDF
-  const likedColleges = colleges.filter((c: any) => c.liked).slice(0, 4);
-  const meetingDate = new Date().toLocaleDateString();
-  const counselor = { name: "Ujjbal Sharma", title: "Leap Scholar Counselor", phone: "6364467022" };
-  const student = { name: formData.name, status: `Aspiring Undergraduate – ${formData.intake || "Fall 2025"}` };
-  const purpose = `Discussed profile, goals, recommended college fit, and action plan for ${formData.courseName} in ${formData.country}.`;
-  const shortlistedColleges = likedColleges;
-  const fitSummary = { roi: "High", acceptance: "80%", peer: "₹30L avg salary", fitTag: "Good Match" };
-  const challenges = ["Late application timing", "Backlogs may limit options"];
-  const conclusion = "Focus will be on 2–3 viable institutions.";
-  const timeline = { urgency: "Submit by April 15 to stay eligible", strategy: "Apply to all shortlisted universities promptly." };
-  const insights = [
-    { label: "Act Fast", value: "Time is limited for this intake. Apply ASAP." },
-    { label: "Apply Broadly", value: "Maximize chances by applying to all suitable options." },
-    { label: "Financial Tips", value: "Show a mix of loan and savings for visa." },
-    { label: "Application Notes", value: "Don’t wait for test scores to apply." },
-  ];
-  const financial = { tuition: "₹15–20L", living: "₹11L/year", total: "₹30–35L", funding: "Loan + Parent Savings" };
-  const roiData = likedColleges.map((c: any, i: number) => ({ name: c.name, roi: (3.2 + i * 0.3) }));
-  const usps = likedColleges.flatMap((c: any) => (Array.isArray(c.usps) ? c.usps : [])).slice(0, 8);
-  const relationshipManager = { name: "Relationship Manager", phone: "7204327470" };
-
-  // Render LeapStyleSummaryPDF to a hidden div
-  const container = document.createElement("div");
-  container.style.position = "fixed";
-  container.style.left = "-9999px";
-  document.body.appendChild(container);
-  import("react-dom/client").then((ReactDOMClient) => {
-    const root = ReactDOMClient.createRoot(container);
-    root.render(
-      <LeapStyleSummaryPDF
-        meetingDate={meetingDate}
-        counselor={counselor}
-        student={student}
-        purpose={purpose}
-        shortlistedColleges={shortlistedColleges}
-        fitSummary={fitSummary}
-        challenges={challenges}
-        conclusion={conclusion}
-        timeline={timeline}
-        insights={insights}
-        financial={financial}
-        roiData={roiData}
-        usps={usps}
-        relationshipManager={relationshipManager}
-      />
-    );
-    setTimeout(async () => {
-      const canvas = await html2canvas(container.firstChild as HTMLElement, { scale: 2, useCORS: true, backgroundColor: "#fff" });
-      const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = canvas.width;
-      const imgHeight = canvas.height;
-      const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
-      const scaledWidth = imgWidth * ratio;
-      const scaledHeight = imgHeight * ratio;
-      const x = (pdfWidth - scaledWidth) / 2;
-      const y = (pdfHeight - scaledHeight) / 2;
-      pdf.addImage(imgData, "PNG", x, y, scaledWidth, scaledHeight);
-      pdf.save(`College_Fit_Summary_${formData.name || "Report"}_${new Date().toISOString().split("T")[0]}.pdf`);
-      root.unmount();
-      document.body.removeChild(container);
-    }, 100);
-  });
-};
+import Papa from 'papaparse'
 
 // Helper function to generate shareable link
 const generateShareableLink = () => {
@@ -269,6 +197,8 @@ export default function SummaryStep({
   const summaryRef = useRef<HTMLDivElement>(null) as React.RefObject<HTMLDivElement>
   const [collegeRoiData, setCollegeRoiData] = useState<{ [collegeId: string]: number }>({})
   const [roiLoading, setRoiLoading] = useState<{ [collegeId: string]: boolean }>({})
+  const [counselorInfo, setCounselorInfo] = useState<{ name: string; title: string; phone?: string } | null>(null)
+  const [counselorLoaded, setCounselorLoaded] = useState(false)
 
   // Get liked colleges
   const likedColleges = colleges.filter((college) => college.liked)
@@ -354,6 +284,32 @@ export default function SummaryStep({
     })
   }, [likedColleges])
 
+  useEffect(() => {
+    if (!counselorLoaded) {
+      fetch('https://docs.google.com/spreadsheets/d/e/2PACX-1vRIiXlBnG9Vh2Gkvwnz4FDwE-aD1gpB3uWNtsUgrk5HV5Jd89KM5V0Jeb0It7867pbGSt8iD-UvmJIE/pub?output=csv')
+        .then((res) => res.text())
+        .then((csv) => {
+          Papa.parse(csv, {
+            header: true,
+            skipEmptyLines: true,
+            complete: (results: any) => {
+              // Find a row with counselor info (e.g., type === 'counselor' or has counselor_name)
+              const row = results.data.find((r: any) => r.counselor_name || r["Counselor Name"])
+              if (row) {
+                setCounselorInfo({
+                  name: row.counselor_name || row["Counselor Name"],
+                  title: row.counselor_title || row["Counselor Title"] || "Leap Scholar Counselor",
+                  phone: row.counselor_phone || row["Counselor Phone"] || row.phone,
+                })
+              }
+              setCounselorLoaded(true)
+            },
+          })
+        })
+        .catch(() => setCounselorLoaded(true))
+    }
+  }, [counselorLoaded])
+
   const roiData = generateROIData()
   const employmentData = generateEmploymentData()
 
@@ -432,6 +388,79 @@ export default function SummaryStep({
       status: "pending",
     },
   ]
+
+  // Move generatePDF inside the component so it can access counselorInfo from state
+  const generatePDF = async (formData: any, colleges: any, summaryRef: React.RefObject<HTMLDivElement>) => {
+    const html2canvas = (await import("html2canvas")).default;
+    const jsPDF = (await import("jspdf")).default;
+
+    // Prepare data for LeapStyleSummaryPDF
+    const likedColleges = colleges.filter((c: any) => c.liked).slice(0, 4);
+    const meetingDate = new Date().toLocaleDateString();
+    const counselor = counselorInfo || { name: "Ujjbal Sharma", title: "Leap Scholar Counselor", phone: "6364467022" };
+    const student = { name: formData.name, status: `Aspiring Undergraduate – ${formData.intake || "Fall 2025"}` };
+    const purpose = `Discussed profile, goals, recommended college fit, and action plan for ${formData.courseName} in ${formData.country}.`;
+    const shortlistedColleges = likedColleges;
+    const fitSummary = { roi: "High", acceptance: "80%", peer: "₹30L avg salary", fitTag: "Good Match" };
+    const challenges = ["Late application timing", "Backlogs may limit options"];
+    const conclusion = "Focus will be on 2–3 viable institutions.";
+    const timeline = { urgency: "Submit by April 15 to stay eligible", strategy: "Apply to all shortlisted universities promptly." };
+    const insights = [
+      { label: "Act Fast", value: "Time is limited for this intake. Apply ASAP." },
+      { label: "Apply Broadly", value: "Maximize chances by applying to all suitable options." },
+      { label: "Financial Tips", value: "Show a mix of loan and savings for visa." },
+      { label: "Application Notes", value: "Don’t wait for test scores to apply." },
+    ];
+    const financial = { tuition: "₹15–20L", living: "₹11L/year", total: "₹30–35L", funding: "Loan + Parent Savings" };
+    const roiData = likedColleges.map((c: any, i: number) => ({ name: c.name, roi: (3.2 + i * 0.3) }));
+    const usps = likedColleges.flatMap((c: any) => (Array.isArray(c.usps) ? c.usps : [])).slice(0, 8);
+    const relationshipManager = { name: "Relationship Manager", phone: "7204327470" };
+
+    // Render LeapStyleSummaryPDF to a hidden div
+    const container = document.createElement("div");
+    container.style.position = "fixed";
+    container.style.left = "-9999px";
+    document.body.appendChild(container);
+    import("react-dom/client").then((ReactDOMClient) => {
+      const root = ReactDOMClient.createRoot(container);
+      root.render(
+        <LeapStyleSummaryPDF
+          meetingDate={meetingDate}
+          counselor={counselor}
+          student={student}
+          purpose={purpose}
+          shortlistedColleges={shortlistedColleges}
+          fitSummary={fitSummary}
+          challenges={challenges}
+          conclusion={conclusion}
+          timeline={timeline}
+          insights={insights}
+          financial={financial}
+          roiData={roiData}
+          usps={usps}
+          relationshipManager={relationshipManager}
+        />
+      );
+      setTimeout(async () => {
+        const canvas = await html2canvas(container.firstChild as HTMLElement, { scale: 2, useCORS: true, backgroundColor: "#fff" });
+        const imgData = canvas.toDataURL("image/png");
+        const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+        const imgWidth = canvas.width;
+        const imgHeight = canvas.height;
+        const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
+        const scaledWidth = imgWidth * ratio;
+        const scaledHeight = imgHeight * ratio;
+        const x = (pdfWidth - scaledWidth) / 2;
+        const y = (pdfHeight - scaledHeight) / 2;
+        pdf.addImage(imgData, "PNG", x, y, scaledWidth, scaledHeight);
+        pdf.save(`College_Fit_Summary_${formData.name || "Report"}_${new Date().toISOString().split("T")[0]}.pdf`);
+        root.unmount();
+        document.body.removeChild(container);
+      }, 100);
+    });
+  };
 
   return (
     <TooltipProvider>

@@ -154,6 +154,8 @@ export default function ResultsStep({
   const [costDataLoaded, setCostDataLoaded] = useState(false)
   // In ResultsStep component, add state to store fallback tuition fees
   const [fallbackTuitionFees, setFallbackTuitionFees] = useState<{ [collegeId: string]: string }>({});
+  const [userName, setUserName] = useState<string>("")
+  const [userNameLoaded, setUserNameLoaded] = useState(false)
 
   useEffect(() => {
     colleges.forEach((college) => {
@@ -190,7 +192,7 @@ export default function ResultsStep({
           .catch((err) => {
             setUsps((prev) => ({
               ...prev,
-              [college.id]: `Error: ${String(err)}`,
+              [college.id]: `Network error: ${String(err)}`,
             }));
           })
           .finally(() => {
@@ -225,15 +227,13 @@ export default function ResultsStep({
           })
           .then((data) => {
             if (data.error) {
-              console.error("ROI API error:", data.error);
               setRoiData((prev) => ({ ...prev, [college.id]: 3.5 })) // Default fallback
             } else {
               setRoiData((prev) => ({ ...prev, [college.id]: data.roi || 3.5 }))
             }
           })
           .catch((err) => {
-            console.error("ROI fetch error:", err);
-            setRoiData((prev) => ({ ...prev, [college.id]: 3.5 })) // Default fallback
+            setRoiData((prev) => ({ ...prev, [college.id]: -1 })) // -1 means network error
           })
           .finally(() => {
             setRoiLoading((prev) => ({ ...prev, [college.id]: false }))
@@ -260,7 +260,7 @@ export default function ResultsStep({
             }
           })
           .catch(() => {
-            // If API fails, do nothing (will not show blank)
+            setFallbackTuitionFees((prev) => ({ ...prev, [college.id]: "Network error" }));
           });
       }
     })
@@ -278,6 +278,30 @@ export default function ResultsStep({
             },
           })
         })
+      .catch(() => {
+        setCostData([])
+        setCostDataLoaded(true)
+      })
+    }
+
+    if (!userNameLoaded) {
+      fetch('https://docs.google.com/spreadsheets/d/e/2PACX-1vRQtjtY6NkC6LSKa_vEVbwjfoMVUnkGpZp0Q1mpmtJEDx-KXgBLGlmTTOin-VB6ycISSIaISUVOcKin/pub?output=csv')
+        .then((res) => res.text())
+        .then((csv) => {
+          Papa.parse(csv, {
+            header: true,
+            skipEmptyLines: true,
+            complete: (results: any) => {
+              // Find the first row with the user name column
+              const row = results.data.find((r: any) => r["Pre Login Leap User - Pre User → Name"])
+              if (row) {
+                setUserName(row["Pre Login Leap User - Pre User → Name"])
+              }
+              setUserNameLoaded(true)
+            },
+          })
+        })
+      .catch(() => setUserNameLoaded(true))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [colleges])
@@ -566,7 +590,9 @@ export default function ResultsStep({
         </div>
 
         <div className="text-center mb-8 px-2 sm:px-0">
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">College Recommendations for {name}</h1>
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">
+            College Recommendations for {userName || name}
+          </h1>
           <p className="text-base text-gray-600 max-w-2xl mx-auto">
             Based on your counseling profile and {intendedMajor} preferences for {country}
           </p>
