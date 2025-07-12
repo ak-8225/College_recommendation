@@ -158,22 +158,35 @@ export default function ResultsStep({
   const [userName, setUserName] = useState<string>("")
   const [userNameLoaded, setUserNameLoaded] = useState(false)
 
+  // Debug: Log when userName changes
+  useEffect(() => {
+    console.log('userName changed to:', userName)
+  }, [userName])
+
   useEffect(() => {
     colleges.forEach((college) => {
       // Fetch USPs
       if (!usps[college.id] && !uspsLoading[college.id]) {
         setUspsLoading((prev) => ({ ...prev, [college.id]: true }))
-        fetch(`/api/get-usps-google?college=${encodeURIComponent(college.name)}`)
+        fetch(`/api/get-usps-google`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ college: college.name }),
+        })
           .then(async (res) => {
+            console.log("USP API response status:", res.status);
             if (!res.ok) {
               const text = await res.text();
-              throw new Error(`cool, coolAPI error: ${res.status} - ${text}`);
+              console.error("USP API error:", text);
+              throw new Error(`USP API error: ${res.status} - ${text}`);
             }
             const text = await res.text();
+            console.log("USP API response text:", text);
             if (!text) throw new Error("Empty response from USP API");
             try {
               return JSON.parse(text);
             } catch (e) {
+              console.error("USP API JSON parse error:", e, "Text:", text);
               throw new Error("Invalid JSON from USP API: " + text);
             }
           })
@@ -191,6 +204,7 @@ export default function ResultsStep({
             }
           })
           .catch((err) => {
+            console.error("USP API catch error:", err);
             setUsps((prev) => ({
               ...prev,
               [college.id]: `Network error: ${String(err)}`,
@@ -287,7 +301,14 @@ export default function ResultsStep({
 
     // In ResultsStep, get phone from userProfile
     const phone = userProfile?.phone || ""
-    if (!userNameLoaded && phone) {
+    console.log('userProfile:', userProfile)
+    console.log('Phone from userProfile:', phone)
+    
+    // For testing: if no phone, try with a known phone from the sheet
+    const testPhone = phone || "6364467022" // Use a phone number from the sheet for testing
+    console.log('Using phone for lookup:', testPhone)
+    
+    if (!userNameLoaded && testPhone) {
       fetch('https://docs.google.com/spreadsheets/d/e/2PACX-1vRQtjtY6NkC6LSKa_vEVbwjfoMVUnkGpZp0Q1mpmtJEDx-KXgBLGlmTTOin-VB6ycISSIaISUVOcKin/pub?output=csv')
         .then((res) => res.text())
         .then((csv) => {
@@ -297,24 +318,68 @@ export default function ResultsStep({
             complete: (results: any) => {
               console.log('userProfile.phone:', phone)
               console.log('Parsed CSV data type:', typeof results.data, 'length:', results.data.length)
+              console.log('First few rows from sheet:', results.data.slice(0, 3))
+              
               // Normalize phone numbers for comparison
               const normalize = (str: string) => String(str || '').replace(/\D/g, '').trim()
-              const userPhoneNorm = normalize(phone)
+              const userPhoneNorm = normalize(testPhone)
+              console.log('Normalized user phone:', userPhoneNorm)
+              
+              // Log all available phone numbers from sheet
+              const allSheetPhones = results.data.map((r: any) => ({
+                original: r["Pre Login Leap User - Pre User → Phone"],
+                normalized: normalize(r["Pre Login Leap User - Pre User → Phone"]),
+                name: r["Pre Login Leap User - Pre User → Name"]
+              }))
+              console.log('All sheet phones:', allSheetPhones.slice(0, 5))
+              
               // Find the row where the phone matches (normalized)
-              const row = results.data.find((r: any) => normalize(r["Pre Login Leap User - Pre User → Phone"]) === userPhoneNorm)
+              let row = results.data.find((r: any) => {
+                const sheetPhoneNorm = normalize(r["Pre Login Leap User - Pre User → Phone"])
+                console.log('Comparing with sheet phone:', sheetPhoneNorm)
+                return sheetPhoneNorm === userPhoneNorm
+              })
+              
+              // If no exact match, try different phone formats
+              if (!row && userPhoneNorm) {
+                // Try with country code (91)
+                const withCountryCode = '91' + userPhoneNorm
+                row = results.data.find((r: any) => {
+                  const sheetPhoneNorm = normalize(r["Pre Login Leap User - Pre User → Phone"])
+                  return sheetPhoneNorm === withCountryCode
+                })
+                console.log('Tried with country code, found:', row ? 'yes' : 'no')
+              }
+              
+              // If still no match, try without country code
+              if (!row && userPhoneNorm && userPhoneNorm.startsWith('91')) {
+                const withoutCountryCode = userPhoneNorm.substring(2)
+                row = results.data.find((r: any) => {
+                  const sheetPhoneNorm = normalize(r["Pre Login Leap User - Pre User → Phone"])
+                  return sheetPhoneNorm === withoutCountryCode
+                })
+                console.log('Tried without country code, found:', row ? 'yes' : 'no')
+              }
+              
               if (row) {
                 console.log('Matched row:', row)
+                console.log('Setting userName to:', row["Pre Login Leap User - Pre User → Name"])
                 setUserName(row["Pre Login Leap User - Pre User → Name"])
               } else {
+                console.log('No phone match found. User phone:', userPhoneNorm)
                 // Debug: log first few phone numbers and names
                 const allPhones = results.data.map((r: any) => normalize(r["Pre Login Leap User - Pre User → Phone"]))
                 const allNames = results.data.map((r: any) => r["Pre Login Leap User - Pre User → Name"])
-                console.log('No match found. First 10 phones:', allPhones.slice(0, 10))
-                console.log('First 10 names:', allNames.slice(0, 10))
+                console.log('Available phones in sheet:', allPhones.slice(0, 10))
+                console.log('Available names in sheet:', allNames.slice(0, 10))
+                
                 // Fallback: use the first available name
                 const firstRow = results.data.find((r: any) => r["Pre Login Leap User - Pre User → Name"])
                 if (firstRow) {
+                  console.log('Using fallback name:', firstRow["Pre Login Leap User - Pre User → Name"])
                   setUserName(firstRow["Pre Login Leap User - Pre User → Name"])
+                } else {
+                  console.log('No names found in sheet')
                 }
               }
               setUserNameLoaded(true)
@@ -339,7 +404,7 @@ export default function ResultsStep({
 
   /* ---------------------------------------------------------------- */
   // Safeguard against missing data
-  const { name = "Student", intendedMajor = "your major", country = "your country" } = userProfile || {}
+  const { name = userName || "Student", intendedMajor = "your major", country = "your country" } = userProfile || {}
   /* ---------------------------------------------------------------- */
 
   const getCollegeDetails = (college: College) => {
@@ -611,7 +676,7 @@ export default function ResultsStep({
 
         <div className="text-center mb-8 px-2 sm:px-0">
           <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">
-            College Recommendations for {userName || name}
+            College Recommendations for {userName || userProfile?.name || "Student"}
           </h1>
           <p className="text-base text-gray-600 max-w-2xl mx-auto">
             Based on your counseling profile and {intendedMajor} preferences for {country}

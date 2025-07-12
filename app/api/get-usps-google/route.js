@@ -12,6 +12,10 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 if (process.env.NODE_ENV === 'development') {
   console.log("Loaded OPENAI_API_KEY:", OPENAI_API_KEY ? "✅ Present" : "❌ Missing");
+  console.log("Environment variables:", {
+    NODE_ENV: process.env.NODE_ENV,
+    OPENAI_API_KEY_LENGTH: OPENAI_API_KEY ? OPENAI_API_KEY.length : 0
+  });
 }
 
 const USP_PROMPT = `
@@ -57,78 +61,16 @@ export async function GET(req) {
 }
 
 export async function POST(req) {
-  const url = new URL(req.url || '', 'http://localhost');
-  if (url.pathname.endsWith('/get-comparison-metrics')) {
-    const body = await req.json();
-    const college = body.college;
-    if (!college || typeof college !== 'string') {
-      return new Response(JSON.stringify({
-        error: 'Missing college name',
-        details: 'Please provide a college name in the body.'
-      }), { status: 400, headers: { 'Content-Type': 'application/json' } });
-    }
-    if (!OPENAI_API_KEY) {
-      return new Response(JSON.stringify({
-        error: 'Missing OpenAI API key',
-        details: 'Make sure OPENAI_API_KEY is defined in your environment variables.'
-      }), { status: 500, headers: { 'Content-Type': 'application/json' } });
-    }
-    const prompt = `${COMPARISON_PROMPT}\n\nUniversity: ${college}`;
-    const apiUrl = 'https://api.openai.com/v1/chat/completions';
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
-    try {
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o',
-          messages: [
-            { role: 'system', content: 'You are a helpful assistant.' },
-            { role: 'user', content: prompt },
-          ],
-          max_tokens: 700,
-          temperature: 0.2,
-        }),
-        signal: controller.signal
-      });
-      clearTimeout(timeout);
-      if (!response.ok) {
-        const errorText = await response.text();
-        return new Response(JSON.stringify({
-          error: `OpenAI API request failed with status ${response.status}`,
-          details: errorText
-        }), { status: response.status, headers: { 'Content-Type': 'application/json' } });
-      }
-      const data = await response.json();
-      const resultText = data?.choices?.[0]?.message?.content;
-      if (resultText) {
-        return new Response(JSON.stringify({
-          metrics: resultText
-        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
-      } else {
-        return new Response(JSON.stringify({
-          error: 'No valid response from OpenAI API',
-          details: data
-        }), { status: 500, headers: { 'Content-Type': 'application/json' } });
-      }
-    } catch (err) {
-      return new Response(JSON.stringify({
-        error: 'Internal server error',
-        details: err.name === 'AbortError' ? 'Request timed out after 30s' : String(err)
-      }), { status: 500, headers: { 'Content-Type': 'application/json' } });
-    }
-  }
   const body = await req.json();
   const college = body.college;
   return await handleUSP(college);
 }
 
 async function handleUSP(college) {
+  console.log("handleUSP called with college:", college);
+  
   if (!college || typeof college !== 'string') {
+    console.log("Invalid college parameter:", college);
     return new Response(JSON.stringify({
       error: 'Missing college name',
       details: 'Please provide a college name in the query or body.'
@@ -136,6 +78,7 @@ async function handleUSP(college) {
   }
 
   if (!OPENAI_API_KEY) {
+    console.log("Missing OPENAI_API_KEY");
     return new Response(JSON.stringify({
       error: 'Missing OpenAI API key',
       details: 'Make sure OPENAI_API_KEY is defined in your environment variables.'
@@ -149,6 +92,7 @@ async function handleUSP(college) {
   const timeout = setTimeout(() => controller.abort(), 30000); // 10 seconds timeout
 
   try {
+    console.log("Making OpenAI API call with prompt:", prompt.substring(0, 100) + "...");
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
@@ -168,9 +112,11 @@ async function handleUSP(college) {
     });
 
     clearTimeout(timeout);
+    console.log("OpenAI API response status:", response.status);
 
     if (!response.ok) {
       const errorText = await response.text();
+      console.log("OpenAI API error:", errorText);
       return new Response(JSON.stringify({
         error: `OpenAI API request failed with status ${response.status}`,
         details: errorText
@@ -178,6 +124,7 @@ async function handleUSP(college) {
     }
 
     const data = await response.json();
+    console.log("OpenAI API response data:", data);
     const resultText = data?.choices?.[0]?.message?.content;
 
     if (resultText) {

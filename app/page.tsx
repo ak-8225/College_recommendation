@@ -258,6 +258,7 @@ export default function CollegeFitApp() {
                 name: formData.name || "Student",
                 intendedMajor: formData.courseName || (formData as any).intendedMajor || "your major",
                 country: formData.country || "your country",
+                phone: formData.phoneNumber || "",
               }}
               onNext={handleNext}
               onBack={handleBack}
