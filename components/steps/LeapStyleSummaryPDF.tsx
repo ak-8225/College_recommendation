@@ -1,4 +1,5 @@
 import React from "react";
+import { ComposedChart, CartesianGrid, XAxis, YAxis, Line, ResponsiveContainer } from 'recharts';
 
 interface College {
   name: string;
@@ -19,7 +20,7 @@ interface College {
 interface LeapStyleSummaryPDFProps {
   meetingDate: string;
   counselor: { name: string; title: string; phone?: string };
-  student: { name: string; status: string };
+  student: { name: string; status: string; courseName: string };
   purpose: string;
   shortlistedColleges: College[];
   fitSummary: { roi: string; acceptance: string; peer: string; fitTag: string };
@@ -33,7 +34,7 @@ interface LeapStyleSummaryPDFProps {
   relationshipManager?: { name: string; phone: string };
 }
 
-const LeapStyleSummaryPDF: React.FC<LeapStyleSummaryPDFProps> = ({
+const LeapStyleSummaryPDF: React.FC<LeapStyleSummaryPDFProps & { employmentData: any[] }> = ({
   meetingDate,
   counselor,
   student,
@@ -48,6 +49,7 @@ const LeapStyleSummaryPDF: React.FC<LeapStyleSummaryPDFProps> = ({
   roiData,
   usps,
   relationshipManager,
+  employmentData,
 }) => {
   return (
     <div style={{
@@ -62,6 +64,10 @@ const LeapStyleSummaryPDF: React.FC<LeapStyleSummaryPDFProps> = ({
       flexDirection: 'column',
       alignItems: 'center',
     }}>
+      {/* Student Section */}
+      <div style={{ width: '90%', margin: '32px 0 12px 0', textAlign: 'left', fontWeight: 700, fontSize: 22, color: '#222', letterSpacing: -0.5 }}>
+        <span style={{ fontWeight: 800 }}>Student:</span> <span style={{ fontWeight: 700 }}>{student.name}</span> <span style={{ fontWeight: 400, color: '#64748b', fontSize: 18 }}>({student.courseName})</span>
+      </div>
       {/* Header */}
       <div style={{
         width: '100%',
@@ -79,7 +85,15 @@ const LeapStyleSummaryPDF: React.FC<LeapStyleSummaryPDFProps> = ({
           <span style={{ color: '#fff' }}>Leap</span><span style={{ color: '#c7d2fe' }}>Scholar</span>
           <div style={{ fontWeight: 400, fontSize: 20, marginTop: 4, color: '#e0e7ef' }}>College Fit Summary & Action Plan</div>
         </div>
-        <div style={{ fontWeight: 500, fontSize: 18, textAlign: 'right' }}>Meeting Date<br /><span style={{ fontWeight: 700 }}>{meetingDate}</span></div>
+        <div style={{ fontWeight: 500, fontSize: 18, textAlign: 'right' }}>
+          <div style={{ marginBottom: 2 }}>
+            <span style={{ fontWeight: 600 }}>Counselor: </span>{counselor.name}
+          </div>
+          <div style={{ marginBottom: 2 }}>
+            <span style={{ fontWeight: 600 }}>{student.name}</span> <span style={{ color: '#c7d2fe', fontWeight: 400, fontSize: 16 }}>({student.status})</span>
+          </div>
+          Meeting Date<br /><span style={{ fontWeight: 700 }}>{meetingDate}</span>
+        </div>
       </div>
 
       {/* User Name and Program */}
@@ -107,7 +121,7 @@ const LeapStyleSummaryPDF: React.FC<LeapStyleSummaryPDFProps> = ({
       }}>
         <div style={{ flex: 1, background: 'linear-gradient(90deg, #e0e7ff 0%, #dbeafe 100%)', borderRadius: 14, padding: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', boxShadow: '0 2px 8px #2563eb11' }}>
           <div style={{ color: '#2563eb', fontWeight: 600, fontSize: 16, marginBottom: 4 }}>Avg Break-even</div>
-          <div style={{ color: '#1e40af', fontWeight: 800, fontSize: 28 }}>3.2 Years</div>
+          <div style={{ color: '#1e40af', fontWeight: 800, fontSize: 28 }}>2.5 - 3.5 Years</div>
         </div>
         <div style={{ flex: 1, background: 'linear-gradient(90deg, #d1fae5 0%, #f0fdf4 100%)', borderRadius: 14, padding: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', boxShadow: '0 2px 8px #05966911' }}>
           <div style={{ color: '#059669', fontWeight: 600, fontSize: 16, marginBottom: 4 }}>Employment Rate</div>
@@ -215,6 +229,30 @@ const LeapStyleSummaryPDF: React.FC<LeapStyleSummaryPDFProps> = ({
               <div style={{ background: '#6366f1', width: 36, height: `${item.roi * 18}px`, margin: '0 auto', borderRadius: 8, transition: 'height 0.3s', boxShadow: '0 2px 8px #6366f122' }}></div>
               <div style={{ fontSize: 14, marginTop: 8, color: '#222', fontWeight: 700 }}>{item.name}</div>
               <div style={{ fontSize: 14, color: '#2563eb', fontWeight: 700 }}>{item.roi.toFixed(1)} yrs</div>
+            </div>
+          ))}
+        </div>
+      </div>
+      {/* Employment Rate and Starting Salary Graph */}
+      <div style={{ width: '90%', margin: '18px 0 18px 0', background: '#fff', borderRadius: 14, padding: 20, boxShadow: '0 2px 8px #05966911' }}>
+        <div style={{ fontWeight: 700, fontSize: 19, color: '#059669', marginBottom: 10 }}>Employment Rate and Starting Salary</div>
+        <div style={{ width: '100%', height: 220 }}>
+          <ResponsiveContainer width="100%" height={220}>
+            <ComposedChart data={employmentData} margin={{ top: 20, right: 60, left: 20, bottom: 40 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis dataKey="university" tick={{ fontSize: 12, fill: "#666" }} axisLine={false} tickLine={false} />
+              <YAxis yAxisId="left" tick={{ fontSize: 10, fill: "#666" }} axisLine={false} tickLine={false} domain={[80, 100]} label={{ value: "Employment Rate (%)", angle: -90, position: "insideLeft", fontSize: 13, fill: "#10B981" }} />
+              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10, fill: "#666" }} axisLine={false} tickLine={false} domain={[25000, 30000]} label={{ value: "Starting Salary (£)", angle: 90, position: "insideRight", fontSize: 13, fill: "#F59E0B" }} />
+              <Line yAxisId="right" type="monotone" dataKey="salary" stroke="#F59E0B" strokeWidth={3} dot={{ fill: "#F59E0B", strokeWidth: 2, r: 5 }} activeDot={{ r: 7, stroke: "#F59E0B", strokeWidth: 2 }} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+        <div style={{ marginTop: 16, display: 'flex', gap: 16, justifyContent: 'center' }}>
+          {employmentData.map((item, index) => (
+            <div key={index} style={{ background: '#fef3c7', borderRadius: 8, padding: 10, minWidth: 120, textAlign: 'center' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#b45309' }}>{item.university}</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: '#ea580c' }}>£{(item.salary / 1000).toFixed(0)}K</div>
+              <div style={{ fontSize: 13, color: '#059669', fontWeight: 600 }}>{typeof item.rate === 'number' && !isNaN(item.rate) ? `${item.rate}% employed` : '0% employed'}</div>
             </div>
           ))}
         </div>

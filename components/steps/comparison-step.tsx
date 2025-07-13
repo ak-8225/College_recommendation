@@ -7,6 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useState, useEffect } from "react"
 import type { Step, College } from "@/types/college"
+import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface ComparisonStepProps {
   pageVariants: any
@@ -898,6 +900,57 @@ export default function ComparisonStep({
       }
     });
   });
+
+  // New: loading state for all metrics
+  const allMetricsLoaded = selectedColleges.length > 0 && selectedColleges.every(college => !metricsLoading[college.id] && comparisonMetrics[college.id]);
+
+  // Render loading screen if not all metrics are loaded
+  if (!allMetricsLoaded) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] w-full bg-white/80">
+        {/* Top action buttons */}
+        <div className="flex w-full justify-between items-center px-4 sm:px-8 mt-8 mb-8">
+          <Button
+            variant="ghost"
+            onClick={onBack}
+            className="hover:bg-white/50 transition-all duration-300 hover:scale-105"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Analysis
+          </Button>
+          <Button
+            onClick={() => onNext("initial-form")}
+            variant="destructive"
+            className="border-2 border-red-500 bg-white text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-700 font-semibold px-4 py-2 rounded-lg transition-all duration-300"
+          >
+            Logout
+          </Button>
+        </div>
+        <div className="mb-8 flex flex-col items-center">
+          <div className="w-20 h-20 mb-4">
+            <svg className="animate-spin" viewBox="0 0 50 50">
+              <circle className="opacity-20" cx="25" cy="25" r="20" stroke="#6366f1" strokeWidth="5" fill="none" />
+              <circle className="opacity-80" cx="25" cy="25" r="20" stroke="#6366f1" strokeWidth="5" fill="none" strokeDasharray="100" strokeDashoffset="60" />
+            </svg>
+          </div>
+          <div className="text-2xl font-bold text-blue-700 mb-2">Comparing Colleges...</div>
+          <div className="text-gray-500 text-base mb-4">Fetching all parameters and metrics for your selected colleges</div>
+          <Progress className="w-64" value={Math.round((Object.keys(comparisonMetrics).length / selectedColleges.length) * 100)} />
+        </div>
+        <div className="w-full max-w-2xl grid grid-cols-2 gap-4 mt-8">
+          {selectedColleges.map((college) => (
+            <div key={college.id} className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg shadow">
+              <div className={`w-10 h-10 bg-gradient-to-br ${college.color} rounded-lg flex items-center justify-center text-white font-bold text-lg`}>{college.name.charAt(0)}</div>
+              <div>
+                <div className="font-semibold text-gray-900">{college.name}</div>
+                <div className="text-xs text-gray-500">{metricsLoading[college.id] ? <Skeleton className="w-16 h-4" /> : "Ready"}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <TooltipProvider>

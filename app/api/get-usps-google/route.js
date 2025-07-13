@@ -1,4 +1,4 @@
-// Ensure you have GEMINI_API_KEY set in your .env.local and restart your dev server after any changes.
+// Ensure you have GEMINI_API_KEY set in your herestill and restart your dev server after any changes.
 // Example: GEMINI_API_KEY=YOUR_API_KEY
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
@@ -89,7 +89,7 @@ async function handleUSP(college) {
   const apiUrl = 'https://api.openai.com/v1/chat/completions';
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30000); // 10 seconds timeout
+  const timeout = setTimeout(() => controller.abort(), 30000); // 30 seconds timeout
 
   try {
     console.log("Making OpenAI API call with prompt:", prompt.substring(0, 100) + "...");
@@ -140,7 +140,7 @@ async function handleUSP(college) {
   } catch (err) {
     return new Response(JSON.stringify({
       error: 'Internal server error',
-      details: err.name === 'AbortError' ? 'Request timed out after 10s' : String(err)
+      details: err.name === 'AbortError' ? 'Request to OpenAI API timed out after 30 seconds. Please try again later.' : String(err)
     }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }
 }

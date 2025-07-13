@@ -547,6 +547,19 @@ export default function InitialFormStep({
           welcomeCallDone: selectedProfile.welcomeCallDone,
         }))
 
+        // Find the row where the phone matches (normalized)
+        let row = profiles.find((r: any) => {
+          const sheetPhoneNorm = normalizePhone(r["Pre Login Leap User - Pre User → Phone"])
+          return sheetPhoneNorm === normalizePhone(formData.phoneNumber)
+        })
+        if (row) {
+          setFormData((prev: any) => ({
+            ...prev,
+            sheetName: (row as any)["Pre Login Leap User - Pre User → Name"],
+            sheetCourseName: (row as any)["Counsellor Recommendation - Pre User → Course Name"],
+          }))
+        }
+
         // Generate colleges based on user's data with tuition fees, living costs, and ranking data
         const generatedColleges = userEntries
           .map((entry, index) => {
