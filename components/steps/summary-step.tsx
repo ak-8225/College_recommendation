@@ -473,7 +473,7 @@ export default function SummaryStep({
     const jsPDF = (await import("jspdf")).default;
 
     // Prepare data for LeapStyleSummaryPDF
-    const likedColleges = colleges.filter((c: any) => c.liked).slice(0, 4);
+    const likedColleges = colleges.filter((c: any) => c.liked);
     const meetingDate = new Date().toLocaleDateString();
     const counselor = counselorInfo || { name: "Ujjbal Sharma", title: "Leap Scholar Counselor", phone: "6364467022" };
     // Always use the name from the sheet if available

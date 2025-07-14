@@ -121,27 +121,30 @@ const LeapStyleSummaryPDF: React.FC<LeapStyleSummaryPDFProps & { employmentData:
         {shortlistedColleges.map((col, i) => {
           let tuitionFeeDisplay = 'N/A';
           if (col.tuitionFee) {
-            const num = typeof col.tuitionFee === 'number' ? col.tuitionFee : parseFloat(col.tuitionFee.replace(/[^.]/g, ''));
+            const num = typeof col.tuitionFee === 'number' ? col.tuitionFee : parseFloat(col.tuitionFee.replace(/[^.0-9]/g, ''));
             tuitionFeeDisplay = num ? `₹${num.toLocaleString('en-IN')} INR per year` : 'N/A';
           }
-          // Calculate break-even years as in summary/recommendation page
-          const breakEvenValue = 3.2 + i * 0.3;
+          // Use col.roi if present, else fallback to calculated value
+          let breakEvenValue = col.roi ? parseFloat(col.roi) : (3.2 + i * 0.3);
           let breakEvenYears = '';
-          if (breakEvenValue < 4) {
+          if (isNaN(breakEvenValue) || breakEvenValue > 6) {
+            breakEvenYears = 'N/A';
+          } else if (breakEvenValue < 4) {
             const min = (breakEvenValue - 0.2).toFixed(1);
             const max = (breakEvenValue + 0.3).toFixed(1);
-            breakEvenYears = `${min} - ${max} Years`;
+            if (parseFloat(min) > 6 || parseFloat(max) > 6) {
+              breakEvenYears = 'N/A';
+            } else {
+              breakEvenYears = `${min} - ${max} Years`;
+            }
           } else {
             const min = Math.floor(breakEvenValue);
             const max = Math.ceil(breakEvenValue);
-            breakEvenYears = `${min} - ${max} Years`;
-          }
-          // Filter break-even
-          const match = breakEvenYears.match(/([\d.]+)\s*-\s*([\d.]+)/);
-          if (match) {
-            const min = parseFloat(match[1]);
-            const max = parseFloat(match[2]);
-            if (min > 6 || max > 6) breakEvenYears = 'N/A';
+            if (min > 6 || max > 6) {
+              breakEvenYears = 'N/A';
+            } else {
+              breakEvenYears = `${min} - ${max} Years`;
+            }
           }
           return (
             <div key={i} style={{
@@ -210,8 +213,10 @@ const LeapStyleSummaryPDF: React.FC<LeapStyleSummaryPDFProps & { employmentData:
           <div style={{ color: '#2563eb', fontWeight: 700, fontSize: 18, marginBottom: 6, textAlign: 'center' }}>Avg Break-even</div>
           <div style={{ color: '#1e40af', fontWeight: 900, fontSize: 32, textAlign: 'center' }}>{(() => {
             if (roiData && roiData.length) {
-              const min = Math.min(...roiData.map(r => r.roi));
-              const max = Math.max(...roiData.map(r => r.roi));
+              let min = Math.min(...roiData.map(r => r.roi));
+              let max = Math.max(...roiData.map(r => r.roi));
+              if (isNaN(min) || min > 6) return 'N/A';
+              if (max > 6) max = 6;
               return `${min.toFixed(1)} - ${max.toFixed(1)} Years`;
             }
             return 'N/A';
@@ -247,21 +252,24 @@ const LeapStyleSummaryPDF: React.FC<LeapStyleSummaryPDFProps & { employmentData:
       </div>
       {/* 6. Data Points Section */}
       <div style={{ width: '100vw', margin: '48px 0 24px 0', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 32, justifyItems: 'center', alignItems: 'stretch', paddingLeft: 32, paddingRight: 32 }}>
-        {roiData && roiData.length > 0 && roiData.map((item, idx) => (
-          <div key={idx} style={{ background: '#f8fafc', border: '2px solid #2563eb22', borderRadius: 18, boxShadow: '0 4px 16px #2563eb11', padding: 24, minWidth: 220, maxWidth: 260, flex: '1 1 220px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-            <div style={{ fontWeight: 700, fontSize: 18, color: '#2563eb', marginBottom: 2 }}>{item.name}</div>
-            <div style={{ fontSize: 14, color: '#64748b', marginBottom: 2 }}>Break-even</div>
-            <div style={{ fontWeight: 700, fontSize: 22, color: '#059669', marginBottom: 2 }}>{item.roi > 6 ? 'N/A' : `${item.roi.toFixed(1)} Years`}</div>
-            {employmentData && employmentData[idx] && (
-              <>
-                <div style={{ fontSize: 14, color: '#64748b', marginTop: 6 }}>Employment Rate</div>
-                <div style={{ fontWeight: 700, fontSize: 18, color: '#047857' }}>{employmentData[idx].rate ? `${employmentData[idx].rate}%` : 'N/A'}</div>
-                <div style={{ fontSize: 14, color: '#64748b', marginTop: 6 }}>Avg. Salary</div>
-                <div style={{ fontWeight: 700, fontSize: 18, color: '#7c3aed' }}>{employmentData[idx].salary ? `£${(employmentData[idx].salary / 1000).toFixed(1)}K` : 'N/A'}</div>
-              </>
-            )}
-          </div>
-        ))}
+        {roiData && roiData.length > 0 && roiData.map((item, idx) => {
+          let roiDisplay = (isNaN(item.roi) || item.roi > 6) ? 'N/A' : `${item.roi.toFixed(1)} Years`;
+          return (
+            <div key={idx} style={{ background: '#f8fafc', border: '2px solid #2563eb22', borderRadius: 18, boxShadow: '0 4px 16px #2563eb11', padding: 24, minWidth: 220, maxWidth: 260, flex: '1 1 220px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+              <div style={{ fontWeight: 700, fontSize: 18, color: '#2563eb', marginBottom: 2 }}>{item.name}</div>
+              <div style={{ fontSize: 14, color: '#64748b', marginBottom: 2 }}>Break-even</div>
+              <div style={{ fontWeight: 700, fontSize: 22, color: '#059669', marginBottom: 2 }}>{roiDisplay}</div>
+              {employmentData && employmentData[idx] && (
+                <>
+                  <div style={{ fontSize: 14, color: '#64748b', marginTop: 6 }}>Employment Rate</div>
+                  <div style={{ fontWeight: 700, fontSize: 18, color: '#047857' }}>{employmentData[idx].rate ? `${employmentData[idx].rate}%` : 'N/A'}</div>
+                  <div style={{ fontSize: 14, color: '#64748b', marginTop: 6 }}>Avg. Salary</div>
+                  <div style={{ fontWeight: 700, fontSize: 18, color: '#7c3aed' }}>{employmentData[idx].salary ? `£${(employmentData[idx].salary / 1000).toFixed(1)}K` : 'N/A'}</div>
+                </>
+              )}
+            </div>
+          );
+        })}
       </div>
       {/* 7. Footer */}
       <div style={{ width: '100vw', borderTop: '1px solid #e0e7ef', paddingTop: 16, marginTop: 18, fontSize: 14, textAlign: 'left', paddingLeft: 32, paddingRight: 32, paddingBottom: 32, background: 'linear-gradient(0deg, #f8fafc 80%, #fff 100%)' }}>
