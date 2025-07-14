@@ -194,14 +194,12 @@ export default function SummaryStep({
   onBack,
 }: SummaryStepProps) {
   // Always use the name from the sheet if available
-  const studentName = formData.sheetName || formData.name;
+  const [studentName, setStudentName] = useState(formData.sheetName || formData.name);
   // Debug logging
   console.log('DEBUG: formData.sheetName:', formData.sheetName);
   console.log('DEBUG: formData.name:', formData.name);
   console.log('DEBUG: full formData:', formData);
-  if (!studentName) {
-    console.error('ERROR: No student name found in formData.');
-  }
+  // Removed error log for missing student name
   const [shareUrl, setShareUrl] = useState<string>("")
   const summaryRef = useRef<HTMLDivElement>(null) as React.RefObject<HTMLDivElement>
   const [collegeRoiData, setCollegeRoiData] = useState<{ [collegeId: string]: number }>({})
@@ -343,14 +341,19 @@ export default function SummaryStep({
                 }
                 
                 if (row) {
-                  console.log('Found counselor row:', row)
-                  const counselorName = row["Pre User Counseling - Pre User → Assigned Counsellor"]
-                  console.log('Setting counselor name to:', counselorName)
+                  console.log('DEBUG: Counselor row:', row);
+                  const counselorName = row["Pre User Counseling - Pre User → Assigned Counsellor"];
+                  const counselorPhone = row["Jerry"];
+                  const studentNameFromSheet = row["Pre Login Leap User - Pre User → Name"];
+                  console.log('DEBUG: Counselor name:', counselorName);
+                  console.log('DEBUG: Counselor phone:', counselorPhone);
+                  console.log('DEBUG: Student name from sheet:', studentNameFromSheet);
                   setCounselorInfo({
                     name: counselorName || "Ujjbal Sharma",
                     title: "Leap Scholar Counselor",
-                    phone: "6364467022",
+                    phone: counselorPhone || "6364467022",
                   })
+                  setStudentName(studentNameFromSheet || formData.sheetName || formData.name);
                 } else {
                   console.log('No counselor match found for phone:', userPhoneNorm)
                   // Use default counselor
@@ -602,7 +605,7 @@ export default function SummaryStep({
           <p className="text-lg text-gray-600 max-w-3xl mx-auto">
             {studentName
               ? `Comprehensive insights for ${studentName}'s ${formData.courseName} journey in ${formData.country}`
-              : <span style={{color: 'red', fontWeight: 700}}>ERROR: Student name not found. Please check your profile data.</span>
+              : ''
             }
           </p>
         </div>
