@@ -1,4 +1,4 @@
-// Ensure you have GEMINI_API_KEY set in your herestill and restart your dev server after any changes.
+// Ensure you have GEMINI_API_KEY set in your herestillstillit is and restart your dev server after any changes.
 // Example: GEMINI_API_KEY=YOUR_API_KEY
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
@@ -27,6 +27,7 @@ Answer based on the following aspects:
 3. Proximity to any flagship geographical areas — that can boost job/internship opportunities.
 4. The city where it is located — is that city affordable compared to others in that country?
 5. Proximity to most popular cities — how much travel time etc.
+6. The latest QS World University Ranking (number only, as a separate bullet point, if available).
 
 Answer everything **very objectively** and in **bullet points**, within **300 words**.
 
@@ -54,6 +55,9 @@ const COMPARISON_PROMPT = `You are a study abroad data expert specializing in an
 
 Return all the information in bullet points, within 300 words. Keep language clear and objective, avoid filler text or marketing tone. Only return the data points, no explanation or extra text.`;
 
+// --- New: College Ranking Endpoint ---
+const RANKING_PROMPT = `You are a university data expert. Given the name of a university, return ONLY the latest QS World University Ranking (as a number, e.g., 326). Do not include any extra text, explanation, or formatting. If the ranking is not available, return 'N/A'.`;
+
 export async function GET(req) {
   const { searchParams } = new URL(req.url);
   const college = searchParams.get('college');
@@ -62,6 +66,10 @@ export async function GET(req) {
 
 export async function POST(req) {
   const body = await req.json();
+  if (body.college && body.rankingOnly) {
+    // Dedicated ranking endpoint
+    return await handleRanking(body.college);
+  }
   const college = body.college;
   return await handleUSP(college);
 }
@@ -142,5 +150,49 @@ async function handleUSP(college) {
       error: 'Internal server error',
       details: err.name === 'AbortError' ? 'Request to OpenAI API timed out after 30 seconds. Please try again later.' : String(err)
     }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+  }
+}
+
+async function handleRanking(college) {
+  if (!college || typeof college !== 'string') {
+    return new Response(JSON.stringify({ error: 'Missing college name' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+  }
+  if (!OPENAI_API_KEY) {
+    return new Response(JSON.stringify({ error: 'Missing OpenAI API key' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+  }
+  const prompt = `${RANKING_PROMPT}\n\nUniversity: ${college}`;
+  const apiUrl = 'https://api.openai.com/v1/chat/completions';
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: [
+          { role: 'system', content: 'You are a helpful assistant.' },
+          { role: 'user', content: prompt },
+        ],
+        max_tokens: 16,
+        temperature: 0,
+      }),
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+    if (!response.ok) {
+      const errorText = await response.text();
+      return new Response(JSON.stringify({ error: `OpenAI API request failed with status ${response.status}`, details: errorText }), { status: response.status, headers: { 'Content-Type': 'application/json' } });
+    }
+    const data = await response.json();
+    const resultText = data?.choices?.[0]?.message?.content?.trim();
+    // Only return the number or N/A
+    const match = resultText && resultText.match(/\d{2,4}|N\/A/i);
+    return new Response(JSON.stringify({ ranking: match ? match[0] : 'N/A' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  } catch (err) {
+    return new Response(JSON.stringify({ error: 'Internal server error', details: err.name === 'AbortError' ? 'Request to OpenAI API timed out after 30 seconds. Please try again later.' : String(err) }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }
 }
