@@ -66,7 +66,7 @@ const LeapStyleSummaryPDF: React.FC<LeapStyleSummaryPDFProps & { employmentData:
     }}>
       {/* Student Section */}
       <div style={{ width: '90%', margin: '32px 0 12px 0', textAlign: 'left', fontWeight: 700, fontSize: 22, color: '#222', letterSpacing: -0.5 }}>
-        <span style={{ fontWeight: 800 }}>Student:</span> <span style={{ fontWeight: 700 }}>{student.name}</span> <span style={{ fontWeight: 400, color: '#64748b', fontSize: 18 }}>({student.courseName})</span>
+        <span style={{ fontWeight: 800 }}>Student:</span> <span style={{ fontWeight: 700 }}>{student.name || 'Student Name Not Available'}</span> <span style={{ fontWeight: 400, color: '#64748b', fontSize: 18 }}>({student.courseName})</span>
       </div>
       {/* Header */}
       <div style={{

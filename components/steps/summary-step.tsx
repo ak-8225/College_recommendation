@@ -193,6 +193,15 @@ export default function SummaryStep({
   onNext,
   onBack,
 }: SummaryStepProps) {
+  // Always use the name from the sheet if available
+  const studentName = formData.sheetName || formData.name;
+  // Debug logging
+  console.log('DEBUG: formData.sheetName:', formData.sheetName);
+  console.log('DEBUG: formData.name:', formData.name);
+  console.log('DEBUG: full formData:', formData);
+  if (!studentName) {
+    console.error('ERROR: No student name found in formData.');
+  }
   const [shareUrl, setShareUrl] = useState<string>("")
   const summaryRef = useRef<HTMLDivElement>(null) as React.RefObject<HTMLDivElement>
   const [collegeRoiData, setCollegeRoiData] = useState<{ [collegeId: string]: number }>({})
@@ -465,7 +474,6 @@ export default function SummaryStep({
     const meetingDate = new Date().toLocaleDateString();
     const counselor = counselorInfo || { name: "Ujjbal Sharma", title: "Leap Scholar Counselor", phone: "6364467022" };
     // Always use the name from the sheet if available
-    const studentName = formData.sheetName || formData.name;
     const student = { name: studentName, status: `Aspiring Undergraduate – ${formData.intake || "Fall 2025"}`, courseName: formData.sheetCourseName || formData.courseName };
     const purpose = `Discussed profile, goals, recommended college fit, and action plan for ${formData.courseName} in ${formData.country}.`;
     const shortlistedColleges = likedColleges;
@@ -592,7 +600,10 @@ export default function SummaryStep({
             Complete Analysis Summary
           </h1>
           <p className="text-lg text-gray-600 max-w-3xl mx-auto">
-            Comprehensive insights for {formData.name}'s {formData.courseName} journey in {formData.country}
+            {studentName
+              ? `Comprehensive insights for ${studentName}'s ${formData.courseName} journey in ${formData.country}`
+              : <span style={{color: 'red', fontWeight: 700}}>ERROR: Student name not found. Please check your profile data.</span>
+            }
           </p>
         </div>
 

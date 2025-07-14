@@ -14,6 +14,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <script defer data-domain="college-recommendation.vercel.app" src="https://plausible.io/js/script.file-downloads.outbound-links.js"></script>
+        <script dangerouslySetInnerHTML={{ __html: `window.plausible = window.plausible || function() { (window.plausible.q = window.plausible.q || []).push(arguments) }` }} />
+      </head>
       <body>{children}</body>
     </html>
   )

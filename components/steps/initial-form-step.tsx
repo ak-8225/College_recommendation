@@ -553,11 +553,14 @@ export default function InitialFormStep({
           return sheetPhoneNorm === normalizePhone(formData.phoneNumber)
         })
         if (row) {
+          const sheetName = (row as any)["Pre Login Leap User - Pre User → Name"];
           setFormData((prev: any) => ({
             ...prev,
-            sheetName: (row as any)["Pre Login Leap User - Pre User → Name"],
+            sheetName,
+            name: sheetName, // Always set name to sheet value too
             sheetCourseName: (row as any)["Counsellor Recommendation - Pre User → Course Name"],
-          }))
+          }));
+          console.log('DEBUG: Set sheetName and name in formData:', sheetName);
         }
 
         // Generate colleges based on user's data with tuition fees, living costs, and ranking data
