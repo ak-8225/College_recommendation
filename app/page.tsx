@@ -281,6 +281,11 @@ export default function CollegeFitApp() {
               onBack={handleBack}
               tuitionFees={{}}
               rankingData={{}}
+              onCollegeToggle={(id) => {
+                setColleges((prevColleges) =>
+                  prevColleges.map((college) => (college.id === id ? { ...college, liked: !college.liked } : college)),
+                )
+              }}
             />
           )}
 

@@ -18,7 +18,8 @@ interface ComparisonStepProps {
   onNext: (step: Step) => void
   onBack: () => void
   tuitionFees: { [key: string]: string }
-  rankingData: { [key: string]: { rank_value: string; rank_provider_name: string } } // Added prop
+  rankingData: { [key: string]: { rank_value: string; rank_provider_name: string } }
+  onCollegeToggle: (collegeId: string) => void;
 }
 
 export default function ComparisonStep({
@@ -29,7 +30,8 @@ export default function ComparisonStep({
   onNext,
   onBack,
   tuitionFees = {},
-  rankingData = {}, // Added prop
+  rankingData = {},
+  onCollegeToggle,
 }: ComparisonStepProps) {
   const [selectedTheme, setSelectedTheme] = useState("all")
   // New: State to store fetched metrics for each college
@@ -1055,6 +1057,20 @@ export default function ComparisonStep({
                               </span>
                             )}
                           </span>
+                          {/* Like button below the college name */}
+                          <Button
+                            onClick={() => onCollegeToggle(college.id)}
+                            variant={college.liked ? "default" : "outline"}
+                            size="sm"
+                            className={`transition-all duration-300 mt-1 ${
+                              college.liked
+                                ? "bg-red-600 hover:bg-red-700 text-white"
+                                : "hover:bg-red-50 hover:border-red-300"
+                            }`}
+                          >
+                            <Heart className={`w-4 h-4 mr-1 ${college.liked ? "fill-current" : ""}`} />
+                            {college.liked ? "Liked" : "Like"}
+                          </Button>
                           {/* Best metrics count */}
                           <span className="text-xs font-semibold text-green-700 mt-1">
                             {bestCounts[college.id]}/{metricsForTheme.length} metrics

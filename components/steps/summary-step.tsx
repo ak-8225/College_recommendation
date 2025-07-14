@@ -207,6 +207,8 @@ export default function SummaryStep({
   const [counselorInfo, setCounselorInfo] = useState<{ name: string; title: string; phone?: string } | null>(null)
   const [counselorLoaded, setCounselorLoaded] = useState(false)
   const [downloading, setDownloading] = useState(false);
+  const [personalizedSalaries, setPersonalizedSalaries] = useState<{ [collegeId: string]: string }>({});
+  const [salaryLoading, setSalaryLoading] = useState<{ [collegeId: string]: boolean }>({});
 
   // Get liked colleges
   const likedColleges = colleges.filter((college) => college.liked)
@@ -226,23 +228,6 @@ export default function SummaryStep({
       name: college.name,
       roi: index === 0 ? 3.2 : index === 1 ? 3.5 : 4.1 + index * 0.3,
       color: "#4F46E5",
-    }))
-  }
-
-  const generateEmploymentData = () => {
-    if (likedColleges.length === 0) {
-      // Fallback data if no colleges are liked
-      return [
-        { university: "University of Salford", rate: 95, salary: 28000 },
-        { university: "Coventry University", rate: 89, salary: 26500 },
-        { university: "University of Dundee", rate: 92, salary: 29200 },
-      ]
-    }
-
-    return likedColleges.map((college, index) => ({
-      university: college.name, // Use full name
-      rate: index === 0 ? 95 : index === 1 ? 89 : 92,
-      salary: index === 0 ? 28000 : index === 1 ? 26500 : 29200,
     }))
   }
 
@@ -386,6 +371,63 @@ export default function SummaryStep({
         })
     }
   }, [counselorLoaded, formData.phoneNumber])
+
+  // Fetch personalized salary for each liked college
+  useEffect(() => {
+    likedColleges.forEach((college) => {
+      if (!personalizedSalaries[college.id] && !salaryLoading[college.id]) {
+        setSalaryLoading((prev) => ({ ...prev, [college.id]: true }));
+        // Get user credentials from formData (sheet)
+        const totalWorkExp = formData["Total Work Experience"] || formData.totalWorkExperience || formData.total_work_experience || "0";
+        const country = college.country;
+        const courseName = college.courseName || formData["Counsellor Recommendation - Pre User → Course Name"] || formData.courseName || "";
+        const collegeName = college.name;
+        const tuitionFee = college.tuitionFee || formData["Counsellor Recommendation - Pre User → Tuition Fee"] || "N/A";
+        const duration = formData["Counsellor Recommendation - Pre User → Duration Of Course"] || "N/A";
+        const ielts = formData["Counsellor Recommendation - Pre User → Ielts Band"] || "N/A";
+        const budget = formData["Pre User Counseling - Pre User → Budget"] || formData["Counsellor Recommendation - Pre User → Budget"] || "N/A";
+        const city = formData["Current Residence State"] || "N/A";
+        const ranking = college.ranking || formData["qsRanking"] || "N/A";
+        const prompt = `You are a career outcomes analyst specializing in international education. Given the following student and college details, estimate the most likely average starting salary for this student after graduation.\n\nStudent & College Details:\n- College Name: ${collegeName}\n- Country of College: ${country}\n- Program/Course Name: ${courseName}\n- Total Work Experience (in months): ${totalWorkExp}\n- Tuition Fee: ${tuitionFee}\n- Duration of Course: ${duration}\n- IELTS Band: ${ielts}\n- Budget: ${budget}\n- City/State: ${city}\n- College Ranking: ${ranking}\n\nInstructions:\n- Use all the above details to personalize the starting salary estimate.\n- Use the student's total work experience to adjust the starting salary estimate. More experience should generally increase the expected starting salary, especially for programs and countries where work experience is valued.\n- Consider the country-specific job market and typical starting salaries for the given program.\n- Use the program/course name to match with relevant industry salary data.\n- If the program is STEM, business, healthcare, or another high-demand field, factor that into the estimate.\n- If the country is the USA, UK, Canada, Australia, or another major study destination, use the latest available data for that country and program.\n- Return the estimated starting salary in both the country-specific currency and in USD.\n- Be as realistic and data-driven as possible. If exact data is unavailable, provide a best estimate based on similar profiles and recent graduates.\n- You must return a different salary for each college, even if the details are similar.\n- Format your response as:\n  - Estimated Starting Salary: [COUNTRY_CURRENCY] ([USD])\n  - Brief reasoning (1-2 sentences) explaining how the estimate was calculated.`;
+        console.log('DEBUG: OpenAI prompt for college', collegeName, prompt);
+        fetch("/api/openai-salary", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt }),
+        })
+          .then(async (res) => {
+            if (!res.ok) throw new Error(await res.text());
+            return res.json();
+          })
+          .then((data) => {
+            console.log('DEBUG: OpenAI response for college', collegeName, data);
+            setPersonalizedSalaries((prev) => ({ ...prev, [college.id]: data.salary || "N/A" }));
+          })
+          .catch((err) => {
+            setPersonalizedSalaries((prev) => ({ ...prev, [college.id]: "N/A" }));
+          })
+          .finally(() => {
+            setSalaryLoading((prev) => ({ ...prev, [college.id]: false }));
+          });
+      }
+    });
+  }, [likedColleges, formData]);
+
+  const generateEmploymentData = () => {
+    if (likedColleges.length === 0) {
+      // Fallback data if no colleges are liked
+      return [
+        { university: "University of Salford", rate: 95, salary: "$28,000 (USD)" },
+        { university: "Coventry University", rate: 89, salary: "$26,500 (USD)" },
+        { university: "University of Dundee", rate: 92, salary: "$29,200 (USD)" },
+      ];
+    }
+    return likedColleges.map((college, index) => ({
+      university: college.name,
+      rate: index === 0 ? 95 : index === 1 ? 89 : 92,
+      salary: personalizedSalaries[college.id] || (salaryLoading[college.id] ? "Loading..." : "N/A"),
+    }));
+  };
 
   const roiData = generateROIData()
   const employmentData = generateEmploymentData()
@@ -884,7 +926,7 @@ export default function SummaryStep({
                     {employmentData.map((item, index) => (
                       <div key={index} className="bg-orange-50 rounded-lg p-2">
                         <div className="text-xs font-medium text-orange-800">{item.university}</div>
-                        <div className="text-sm font-bold text-orange-900">£{(item.salary / 1000).toFixed(0)}K</div>
+                        <div className="text-sm font-bold text-orange-900">{item.salary}</div>
                         <div className="text-xs text-green-600">{typeof item.rate === 'number' && !isNaN(item.rate) ? `${item.rate}% employed` : '0% employed'}</div>
                       </div>
                     ))}
