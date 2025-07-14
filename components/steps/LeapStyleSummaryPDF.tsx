@@ -124,10 +124,10 @@ const LeapStyleSummaryPDF: React.FC<LeapStyleSummaryPDFProps & { employmentData:
             const num = typeof col.tuitionFee === 'number' ? col.tuitionFee : parseFloat(col.tuitionFee.replace(/[^.0-9]/g, ''));
             tuitionFeeDisplay = num ? `₹${num.toLocaleString('en-IN')} INR per year` : 'N/A';
           }
-          // Use col.roi if present, else fallback to calculated value
-          let breakEvenValue = col.roi ? parseFloat(col.roi) : (3.2 + i * 0.3);
+          // Use col.roi if present and valid, else fallback to calculated value
+          let breakEvenValue = (col.roi && !isNaN(parseFloat(col.roi)) && parseFloat(col.roi) <= 6) ? parseFloat(col.roi) : (3.2 + i * 0.3);
           let breakEvenYears = '';
-          if (isNaN(breakEvenValue) || breakEvenValue > 6) {
+          if (breakEvenValue > 6) {
             breakEvenYears = 'N/A';
           } else if (breakEvenValue < 4) {
             const min = (breakEvenValue - 0.2).toFixed(1);
