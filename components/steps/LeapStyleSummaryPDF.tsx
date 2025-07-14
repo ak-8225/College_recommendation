@@ -57,84 +57,71 @@ const LeapStyleSummaryPDF: React.FC<LeapStyleSummaryPDFProps & { employmentData:
       fontFamily: 'Inter, Arial, sans-serif',
       background: 'linear-gradient(135deg, #f8fafc 0%, #e0e7ef 100%)',
       color: '#222',
-      width: '210mm',
-      minHeight: '297mm',
+      width: '100vw',
+      minHeight: '100vh',
       padding: 0,
       margin: 0,
       boxSizing: 'border-box',
       display: 'flex',
       flexDirection: 'column',
-      alignItems: 'center',
+      alignItems: 'stretch',
+      overflowX: 'hidden',
     }}>
-      {/* Student Section at the very top */}
-      <div style={{ width: '100%', padding: '32px 56px 0 56px', boxSizing: 'border-box', marginBottom: 24 }}>
-        <div style={{ fontWeight: 900, fontSize: 22, color: '#2563eb', marginBottom: 4 }}>Student:</div>
-        <div style={{ fontWeight: 800, fontSize: 28, color: '#222', marginBottom: 2 }}>{student.name}</div>
-        <div style={{ fontWeight: 500, fontSize: 18, color: '#6366f1', marginBottom: 0 }}>{student.status}</div>
-      </div>
-      {/* Header / Cover Section */}
+      {/* 1. Header Section */}
       <div style={{
-        width: '100%',
+        width: '100vw',
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
         background: 'linear-gradient(90deg, #2563eb 0%, #6366f1 100%)',
         color: '#fff',
         borderRadius: '0 0 24px 24px',
-        padding: '32px 56px 20px 56px',
-        marginBottom: 36,
+        padding: '32px 0 20px 0',
+        marginBottom: 0,
         boxSizing: 'border-box',
         boxShadow: '0 4px 24px #6366f133',
         marginTop: 0,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-          <img src="/logo.png" alt="Leap Scholar Logo" style={{ height: 48, marginRight: 18, borderRadius: 8, background: '#fff', padding: 4 }} />
-        </div>
-        <div style={{ fontWeight: 500, fontSize: 20, textAlign: 'right', lineHeight: 1.5 }}>
-          <div style={{ marginBottom: 2 }}>
-            <span style={{ fontWeight: 600 }}>Counselor: </span>{counselor.name}
-            {counselor.phone && (
-              <div style={{ fontWeight: 400, fontSize: 16, color: '#e0e7ef', marginTop: 2 }}>Phone: {counselor.phone}</div>
-            )}
+        <div style={{ display: 'flex', alignItems: 'center', height: 64, minWidth: 120 }}>
+          <div style={{ background: '#fff', borderRadius: 16, padding: 8, marginLeft: 32, display: 'flex', alignItems: 'center', boxShadow: '0 2px 8px #6366f122' }}>
+            <img src="/logo.png" alt="Leap Scholar Logo" style={{ height: 48, width: 'auto', display: 'block' }} />
           </div>
-          <span style={{ fontWeight: 600 }}>Meeting Date:</span> <span style={{ fontWeight: 700 }}>{meetingDate}</span>
+        </div>
+        <div style={{ fontWeight: 500, fontSize: 20, textAlign: 'right', lineHeight: 1.5, marginRight: 32 }}>
+          <div style={{ fontWeight: 700, fontSize: 22, marginBottom: 2 }}>Counselor: <span style={{ fontWeight: 500 }}>{counselor.name}</span></div>
+          {counselor.phone && (
+            <div style={{ fontWeight: 400, fontSize: 16, color: '#e0e7ef', marginBottom: 2 }}>Phone: {counselor.phone}</div>
+          )}
+          <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 2 }}>Meeting Date: <span style={{ fontWeight: 500 }}>{meetingDate}</span></div>
         </div>
       </div>
-
-      {/* Status & Purpose Section */}
-      <div style={{
-        width: '85%',
-        margin: '0 0 18px 0',
-        textAlign: 'left',
-        fontWeight: 700,
-        fontSize: 22,
-        color: '#222',
-        letterSpacing: -0.5,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 8,
-      }}>
-        <span style={{ fontWeight: 600, color: '#6366f1', fontSize: 20 }}>{student.status}</span>
-        <div style={{ background: '#e0e7ef', borderRadius: 10, padding: '10px 18px', fontSize: 16, fontStyle: 'italic', color: '#334155', fontWeight: 400 }}>
-          {purpose}
-        </div>
+      {/* 2. Student Section */}
+      <div style={{ width: '100%', padding: '32px 0 0 32px', boxSizing: 'border-box', marginBottom: 0 }}>
+        <div style={{ fontWeight: 900, fontSize: 22, color: '#2563eb', marginBottom: 4 }}>Student:</div>
+        <div style={{ fontWeight: 800, fontSize: 32, color: '#222', marginBottom: 2 }}>{student.name}</div>
+        <div style={{ fontWeight: 700, fontSize: 20, color: '#6366f1', marginBottom: 0 }}>{student.status}</div>
       </div>
-
-      {/* Liked Colleges Section */}
-      <div style={{ width: '85%', margin: '24px 0 10px 0', fontWeight: 800, fontSize: 26, color: '#2563eb', letterSpacing: -0.5, textAlign: 'left', borderBottom: '2px solid #6366f1', paddingBottom: 8 }}>Liked Colleges</div>
+      {/* 3. Purpose/Intro Section */}
+      <div style={{ width: '100%', margin: '32px 0 0 0', paddingLeft: 32, paddingRight: 32 }}>
+        <div style={{ background: '#e0e7ef', borderRadius: 12, padding: '14px 24px', fontSize: 16, fontStyle: 'italic', color: '#334155', fontWeight: 400, marginBottom: 0 }}>{purpose}</div>
+      </div>
+      {/* 4. Liked Colleges Section */}
+      <div style={{ width: '100%', margin: '36px 0 10px 0', fontWeight: 800, fontSize: 26, color: '#2563eb', letterSpacing: -0.5, textAlign: 'left', borderBottom: '2px solid #6366f1', paddingBottom: 8, paddingLeft: 32 }}>Liked Colleges</div>
       <div style={{
-        width: '85%',
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: 36,
-        marginBottom: 36,
-        justifyContent: 'flex-start',
+        width: '100vw',
+        display: 'grid',
+        gridTemplateColumns: 'repeat(4, 1fr)',
+        gap: 32,
+        margin: '0 0 36px 0',
+        justifyItems: 'center',
         alignItems: 'stretch',
+        paddingLeft: 32,
+        paddingRight: 32,
       }}>
         {shortlistedColleges.map((col, i) => {
           let tuitionFeeDisplay = 'N/A';
           if (col.tuitionFee) {
-            const num = typeof col.tuitionFee === 'number' ? col.tuitionFee : parseFloat(col.tuitionFee.replace(/[^\d.]/g, ''));
+            const num = typeof col.tuitionFee === 'number' ? col.tuitionFee : parseFloat(col.tuitionFee.replace(/[^.]/g, ''));
             tuitionFeeDisplay = num ? `₹${num.toLocaleString('en-IN')} INR per year` : 'N/A';
           }
           // Calculate break-even years as in summary/recommendation page
@@ -149,6 +136,13 @@ const LeapStyleSummaryPDF: React.FC<LeapStyleSummaryPDFProps & { employmentData:
             const max = Math.ceil(breakEvenValue);
             breakEvenYears = `${min} - ${max} Years`;
           }
+          // Filter break-even
+          const match = breakEvenYears.match(/([\d.]+)\s*-\s*([\d.]+)/);
+          if (match) {
+            const min = parseFloat(match[1]);
+            const max = parseFloat(match[2]);
+            if (min > 6 || max > 6) breakEvenYears = 'N/A';
+          }
           return (
             <div key={i} style={{
               background: '#fff',
@@ -156,9 +150,8 @@ const LeapStyleSummaryPDF: React.FC<LeapStyleSummaryPDFProps & { employmentData:
               borderRadius: 18,
               boxShadow: '0 4px 16px #2563eb11',
               padding: 24,
-              minWidth: 260,
-              maxWidth: 320,
-              flex: '1 1 300px',
+              width: '100%',
+              minWidth: 0,
               display: 'flex',
               flexDirection: 'column',
               gap: 14,
@@ -181,29 +174,11 @@ const LeapStyleSummaryPDF: React.FC<LeapStyleSummaryPDFProps & { employmentData:
                 </div>
                 <div>
                   <div style={{ fontSize: 12, color: '#64748b' }}>Avg Package</div>
-                  <div style={{ fontWeight: 600, fontSize: 15, color: '#222' }}>{
-                    (() => {
-                      let val = col.avgSalary || col.avgPackage;
-                      // If missing or clearly invalid, use fallback
-                      if (!val || val === 'N/A' || val === 'NA' || val === '-') {
-                        val = '₹26.0L';
-                      }
-                      return val;
-                    })()
-                  }</div>
+                  <div style={{ fontWeight: 600, fontSize: 15, color: '#222' }}>{(() => { let val = col.avgSalary || col.avgPackage; if (!val || val === 'N/A' || val === 'NA' || val === '-') { val = '₹26.0L'; } return val; })()}</div>
                 </div>
                 <div>
                   <div style={{ fontSize: 12, color: '#64748b' }}>Break-even</div>
-                  <div style={{ fontWeight: 600, fontSize: 15, color: '#059669' }}>{(() => {
-                    // Parse the min and max from breakEvenYears string
-                    const match = breakEvenYears.match(/([\d.]+)\s*-\s*([\d.]+)/);
-                    if (match) {
-                      const min = parseFloat(match[1]);
-                      const max = parseFloat(match[2]);
-                      if (min > 6 || max > 6) return 'N/A';
-                    }
-                    return breakEvenYears;
-                  })()}</div>
+                  <div style={{ fontWeight: 600, fontSize: 15, color: '#059669' }}>{breakEvenYears}</div>
                 </div>
                 <div>
                   <div style={{ fontSize: 12, color: '#64748b' }}>Ranking</div>
@@ -220,14 +195,15 @@ const LeapStyleSummaryPDF: React.FC<LeapStyleSummaryPDFProps & { employmentData:
           );
         })}
       </div>
-
-      {/* Summary Boxes Below Liked Colleges */}
+      {/* 5. Summary Metrics Section */}
       <div style={{
-        width: '85%',
+        width: '100vw',
         display: 'flex',
         gap: 32,
         margin: '36px 0 36px 0',
         justifyContent: 'space-between',
+        paddingLeft: 32,
+        paddingRight: 32,
       }}>
         {/* Avg Break-even */}
         <div style={{ flex: 1, minWidth: 0, maxWidth: 180, aspectRatio: '1 / 1', background: 'linear-gradient(120deg, #e0e7ff 0%, #dbeafe 100%)', borderRadius: 24, padding: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 12px #2563eb11' }}>
@@ -269,9 +245,8 @@ const LeapStyleSummaryPDF: React.FC<LeapStyleSummaryPDFProps & { employmentData:
           <div style={{ color: '#b91c1c', fontWeight: 900, fontSize: 32, textAlign: 'center' }}>{shortlistedColleges.length}</div>
         </div>
       </div>
-
-      {/* At the bottom: Data points from ROI and Employment/Salary graphs */}
-      <div style={{ width: '85%', margin: '48px 0 24px 0', display: 'flex', flexWrap: 'wrap', gap: 32, justifyContent: 'flex-start', alignItems: 'stretch' }}>
+      {/* 6. Data Points Section */}
+      <div style={{ width: '100vw', margin: '48px 0 24px 0', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 32, justifyItems: 'center', alignItems: 'stretch', paddingLeft: 32, paddingRight: 32 }}>
         {roiData && roiData.length > 0 && roiData.map((item, idx) => (
           <div key={idx} style={{ background: '#f8fafc', border: '2px solid #2563eb22', borderRadius: 18, boxShadow: '0 4px 16px #2563eb11', padding: 24, minWidth: 220, maxWidth: 260, flex: '1 1 220px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
             <div style={{ fontWeight: 700, fontSize: 18, color: '#2563eb', marginBottom: 2 }}>{item.name}</div>
@@ -288,14 +263,10 @@ const LeapStyleSummaryPDF: React.FC<LeapStyleSummaryPDFProps & { employmentData:
           </div>
         ))}
       </div>
-
-      {/* Financial Snapshot */}
-      {/* Removed Financial Snapshot section as requested */}
-
-      {/* Footer - Only relationship manager and the financial support line */}
-      <div style={{ width: '90%', borderTop: '1px solid #e0e7ef', paddingTop: 16, marginTop: 18, fontSize: 14, textAlign: 'left' }}>
-        <div style={{ marginTop: 10, color: '#2563eb', fontWeight: 700, fontSize: 16 }}>
-          For best financial support, contact <a href="https://yocket.com/finances/inside-loan-sales?source=loaninternal_webinar" style={{ color: '#2563eb', textDecoration: 'underline' }}>@https://yocket.com/finances/inside-loan-sales?source=loaninternal_webinar</a>
+      {/* 7. Footer */}
+      <div style={{ width: '100vw', borderTop: '1px solid #e0e7ef', paddingTop: 16, marginTop: 18, fontSize: 14, textAlign: 'left', paddingLeft: 32, paddingRight: 32, paddingBottom: 32, background: 'linear-gradient(0deg, #f8fafc 80%, #fff 100%)' }}>
+        <div style={{ marginTop: 10, color: '#2563eb', fontWeight: 700, fontSize: 16, wordBreak: 'break-word', whiteSpace: 'pre-line' }}>
+          For best financial support, contact <a href="https://yocket.com/finances/inside-loan-sales?source=loaninternal_webinar" style={{ color: '#2563eb', textDecoration: 'underline', wordBreak: 'break-all' }}>@https://yocket.com/finances/inside-loan-sales?source=loaninternal_webinar</a>
         </div>
       </div>
     </div>
