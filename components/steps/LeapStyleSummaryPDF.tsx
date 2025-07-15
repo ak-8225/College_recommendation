@@ -15,6 +15,10 @@ interface College {
   ranking?: string;
   tags?: string[];
   usps?: string[];
+  rankingData?: {
+    rank_value: string;
+    rank_provider_name: string;
+  };
 }
 
 interface LeapStyleSummaryPDFProps {
@@ -146,37 +150,37 @@ const LeapStyleSummaryPDF: React.FC<LeapStyleSummaryPDFProps> = ({
       // ROI (Break-even years)
       if (college?.roi) {
         const roiValue = parseFloat(college.roi);
-        if (!isNaN(roiValue) && roiValue <= 6) {
-          dataPoint.roi = roiValue;
-        }
-      } else if (roiItem?.roi) {
-        dataPoint.roi = roiItem.roi;
+        dataPoint.roi = !isNaN(roiValue) && roiValue <= 6 ? roiValue : null;
+      } else if (roiItem?.roi !== undefined) {
+        dataPoint.roi = roiItem.roi !== undefined ? roiItem.roi : null;
       } else {
-        dataPoint.roi = 3.2 + i * 0.3;
+        dataPoint.roi = null;
       }
 
       // Employment rate
-      if (employmentItem?.rate) {
+      if (employmentItem?.rate !== undefined) {
         dataPoint.employmentRate = employmentItem.rate;
       } else {
-        dataPoint.employmentRate = 85 + Math.random() * 10; // Default range 85-95%
+        dataPoint.employmentRate = null;
       }
 
       // Average salary (in thousands)
-      if (employmentItem?.salary) {
+      if (employmentItem?.salary !== undefined) {
         dataPoint.avgSalary = employmentItem.salary / 1000;
-      } else {
+      } else if (college?.avgSalary || college?.avgPackage) {
         const salaryStr = college?.avgSalary || college?.avgPackage || "26";
         const salaryNum = parseFloat(salaryStr.replace(/[^.0-9]/g, ""));
-        dataPoint.avgSalary = salaryNum || 26;
+        dataPoint.avgSalary = !isNaN(salaryNum) ? salaryNum : null;
+      } else {
+        dataPoint.avgSalary = null;
       }
 
       // Tuition fee (in lakhs)
       if (college?.tuitionFee) {
         const tuitionNum = parseFloat(college.tuitionFee.replace(/[^.0-9]/g, ""));
-        dataPoint.tuitionFee = tuitionNum / 100000; // Convert to lakhs
+        dataPoint.tuitionFee = !isNaN(tuitionNum) ? tuitionNum / 100000 : null;
       } else {
-        dataPoint.tuitionFee = 25 + Math.random() * 20; // Default range 25-45 lakhs
+        dataPoint.tuitionFee = null;
       }
 
       chartData.push(dataPoint);
@@ -320,7 +324,9 @@ const LeapStyleSummaryPDF: React.FC<LeapStyleSummaryPDFProps> = ({
                   <div>
                     <div className="text-xs text-gray-500 mb-1">Ranking</div>
                     <div className="font-semibold text-gray-800 text-sm">
-                      #{college.ranking || "N/A"}
+                      {college.rankingData && college.rankingData.rank_value !== "N/A"
+                        ? `Rank #${college.rankingData.rank_value} (${college.rankingData.rank_provider_name})`
+                        : "N/A"}
                     </div>
                   </div>
                 </div>
@@ -375,33 +381,41 @@ const LeapStyleSummaryPDF: React.FC<LeapStyleSummaryPDFProps> = ({
                   type="monotone"
                   dataKey="roi"
                   stroke="#dc2626"
-                  strokeWidth={3}
-                  dot={{ fill: '#dc2626', strokeWidth: 2, r: 4 }}
+                  strokeWidth={5} // Increased for prominence
+                  dot={{ fill: '#dc2626', stroke: '#fff', strokeWidth: 3, r: 8 }} // Larger, bolder dots
+                  activeDot={{ r: 12, fill: '#dc2626', stroke: '#fff', strokeWidth: 4 }}
                   name="ROI (Break-even Years)"
+                  connectNulls={true}
                 />
                 <Line
                   type="monotone"
                   dataKey="employmentRate"
                   stroke="#16a34a"
-                  strokeWidth={3}
-                  dot={{ fill: '#16a34a', strokeWidth: 2, r: 4 }}
+                  strokeWidth={5}
+                  dot={{ fill: '#16a34a', stroke: '#fff', strokeWidth: 3, r: 8 }}
+                  activeDot={{ r: 12, fill: '#16a34a', stroke: '#fff', strokeWidth: 4 }}
                   name="Employment Rate (%)"
+                  connectNulls={true}
                 />
                 <Line
                   type="monotone"
                   dataKey="avgSalary"
                   stroke="#2563eb"
-                  strokeWidth={3}
-                  dot={{ fill: '#2563eb', strokeWidth: 2, r: 4 }}
+                  strokeWidth={5}
+                  dot={{ fill: '#2563eb', stroke: '#fff', strokeWidth: 3, r: 8 }}
+                  activeDot={{ r: 12, fill: '#2563eb', stroke: '#fff', strokeWidth: 4 }}
                   name="Avg Salary (₹L)"
+                  connectNulls={true}
                 />
                 <Line
                   type="monotone"
                   dataKey="tuitionFee"
                   stroke="#7c3aed"
-                  strokeWidth={3}
-                  dot={{ fill: '#7c3aed', strokeWidth: 2, r: 4 }}
+                  strokeWidth={5}
+                  dot={{ fill: '#7c3aed', stroke: '#fff', strokeWidth: 3, r: 8 }}
+                  activeDot={{ r: 12, fill: '#7c3aed', stroke: '#fff', strokeWidth: 4 }}
                   name="Tuition Fee (₹L)"
+                  connectNulls={true}
                 />
               </LineChart>
             </ResponsiveContainer>

@@ -770,7 +770,9 @@ export default function ResultsStep({
                           <div className="flex flex-wrap items-center gap-1 mb-0.5">
                             <div className="flex items-center gap-1 bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full text-xs font-medium">
                               <Star className="w-3 h-3 mr-1" />
-                              Rank #{college.ranking}
+                              {college.rankingData && college.rankingData.rank_value !== "N/A"
+                                ? `Rank #${college.rankingData.rank_value} (${college.rankingData.rank_provider_name})`
+                                : "N/A"}
                             </div>
                             <div className="flex items-center gap-1 bg-green-100 text-green-800 px-2 py-0.5 rounded-full text-xs font-medium">
                               {(() => {

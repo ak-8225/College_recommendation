@@ -363,13 +363,9 @@ export default function SummaryStep({
                 }
                 
                 if (row) {
-                  console.log('DEBUG: Counselor row:', row);
                   const counselorName = row["Pre User Counseling - Pre User → Assigned Counsellor"];
                   const counselorPhone = row["Jerry"];
                   const studentNameFromSheet = row["Pre Login Leap User - Pre User → Name"];
-                  console.log('DEBUG: Counselor name:', counselorName);
-                  console.log('DEBUG: Counselor phone:', counselorPhone);
-                  console.log('DEBUG: Student name from sheet:', studentNameFromSheet);
                   setCounselorInfo({
                     name: counselorName || "Ujjbal Sharma",
                     title: "Leap Scholar Counselor",
@@ -868,7 +864,9 @@ export default function SummaryStep({
                         <div>
                           <p className="text-xs text-gray-600 mb-1">Ranking</p>
                           <p className="font-semibold text-gray-900 text-sm">
-                            {college.ranking ? `Rank #${college.ranking}` : (details.qsRanking || "N/A")}
+                            {college.rankingData && college.rankingData.rank_value !== "N/A"
+                              ? `Rank #${college.rankingData.rank_value} (${college.rankingData.rank_provider_name})`
+                              : "N/A"}
                           </p>
                         </div>
                       </div>
