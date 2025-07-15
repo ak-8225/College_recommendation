@@ -715,7 +715,15 @@ export default function ResultsStep({
                             <h3 className="text-lg font-bold text-gray-900 leading-tight mb-0.5">{college.name}</h3>
                             <p className="text-gray-600 flex items-center gap-1 text-xs mb-0.5">
                               <MapPin className="w-4 h-4" />
-                              {college.country}
+                              {[
+                                college.city,
+                                college.state,
+                                college.country
+                              ]
+                                .filter(
+                                  (part) => part && typeof part === 'string' && part.trim() && part.trim().toLowerCase() !== 'not_available'
+                                )
+                                .join(', ')}
                             </p>
                             <div className="mt-2" />
                           </div>

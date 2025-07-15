@@ -43,9 +43,9 @@ export interface College {
   admissionsOpen: boolean
   liked: boolean
   color: string
-  courseName?: string
-  campus?: string
-  category?: string
+  courseName: string
+  campus: string
+  category: string
   livingCosts?: {
     accommodation: string
     transportation: string
@@ -55,6 +55,8 @@ export interface College {
     rank_value: string
     rank_provider_name: string
   }
+  state?: string
+  city?: string
 }
 
 export type Step = "welcome" | "initial-form" | "profile-form" | "results" | "analysis" | "summary" | "comparison"

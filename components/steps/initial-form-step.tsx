@@ -456,6 +456,62 @@ export default function InitialFormStep({
       .filter((profile) => profile.phoneNumber !== "")
   }
 
+  // Fetch city and state mapping from the provided sheet
+  const fetchCityStateMapping = async (): Promise<{
+    [key: string]: { state: string; city: string }
+  }> => {
+    try {
+      const cityStateCsvUrl =
+        "https://docs.google.com/spreadsheets/d/e/2PACX-1vQV3e5aZmJ1GS7VHudpP-Kkqbbx7383DY5ykMqmY1YXrd2HAWxUKWIxaF29GZyyx1fwE3eAHmsUUN4S/pub?output=csv"
+
+      const response = await fetch(cityStateCsvUrl, {
+        method: 'GET',
+        headers: {
+          'Accept': 'text/csv',
+          'Content-Type': 'text/csv',
+        },
+        mode: 'cors',
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch city/state data: ${response.status}`)
+      }
+
+      const csvText = await response.text()
+      console.log("City/State CSV raw data:", csvText.substring(0, 500))
+
+      const lines = csvText.trim().split("\n")
+      const headers = parseCSVLine(lines[0])
+      console.log("City/State CSV headers:", headers)
+
+      const universityNameIndex = headers.findIndex((h) => h.toLowerCase().includes("university_name"))
+      const stateNameIndex = headers.findIndex((h) => h.toLowerCase().includes("state_name"))
+      const cityNameIndex = headers.findIndex((h) => h.toLowerCase().includes("city_name"))
+
+      const cityStateMap: { [key: string]: { state: string; city: string } } = {}
+
+      lines.slice(1).forEach((line) => {
+        const values = parseCSVLine(line)
+        const universityName = values[universityNameIndex]?.trim() || ""
+        const state = values[stateNameIndex]?.trim() || ""
+        const city = values[cityNameIndex]?.trim() || ""
+        if (universityName) {
+          cityStateMap[universityName.toLowerCase()] = { state, city }
+        }
+      })
+
+      console.log("Final city/state mapping:", cityStateMap)
+      return cityStateMap
+    } catch (error) {
+      if (error instanceof Error) {
+        console.error("Error fetching city/state mapping:", error.message)
+      } else {
+        console.error("Error fetching city/state mapping:", error)
+      }
+      return {}
+    }
+  }
+
   // Main function to fetch user data from Google Sheets CSV
   const fetchUserData = async () => {
     fetchStartTimeRef.current = Date.now()
@@ -468,8 +524,8 @@ export default function InitialFormStep({
 
       console.log("Fetching from URL:", csvUrl)
 
-      // Fetch all four datasets in parallel
-      const [profileResponse, tuitionFees, livingCosts, rankingData] = await Promise.all([
+      // Fetch all five datasets in parallel (add city/state mapping)
+      const [profileResponse, tuitionFees, livingCosts, rankingData, cityStateMap] = await Promise.all([
         fetch(csvUrl, {
           method: 'GET',
           headers: {
@@ -481,6 +537,7 @@ export default function InitialFormStep({
         fetchTuitionFees(),
         fetchLivingCosts(),
         fetchRankingData(),
+        fetchCityStateMapping(), // new
       ])
 
       console.log("Profile response status:", profileResponse.status)
@@ -582,7 +639,7 @@ export default function InitialFormStep({
         }
 
         // Generate colleges based on user's data with tuition fees, living costs, and ranking data
-        const generatedColleges = userEntries
+        let generatedColleges = userEntries
           .map((entry, index) => {
             const collegeName = entry.collegeName || `University ${index + 1}`
             const tuitionFeeFromSheet = findTuitionFee(collegeName, tuitionFees)
@@ -594,12 +651,8 @@ export default function InitialFormStep({
             }
             const collegeRankingData = findRankingData(collegeName, rankingData)
 
-            console.log(
-              `Generating college: "${collegeName}" with tuition fee: "${tuitionFeeFromSheet}", living costs:`,
-              countryLivingCosts,
-              "and ranking data:",
-              collegeRankingData,
-            )
+            // Lookup city/state from mapping
+            const cityState = cityStateMap[collegeName.toLowerCase()] || { state: "", city: "" }
 
             return {
               id: `user-${index}`,
@@ -614,14 +667,38 @@ export default function InitialFormStep({
               admissionsOpen: true,
               liked: false,
               color: getCollegeColor(index),
-              courseName: entry.courseName,
-              campus: entry.campus,
-              category: entry.category,
+              courseName: entry.courseName || "",
+              campus: entry.campus || "",
+              category: entry.category || "",
               livingCosts: countryLivingCosts,
               rankingData: collegeRankingData,
+              state: cityState.state,
+              city: cityState.city,
             }
           })
           .filter((college) => college.name && college.name !== "University 1")
+
+        // Fallback: For any college with missing city or state, call OpenAI API
+        const fillMissingCityState = async (college: College) => {
+          if (college.city && college.state) return college;
+          try {
+            const res = await fetch("/api/openai-citystate", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ college: college.name, country: college.country }),
+            });
+            if (!res.ok) return college;
+            const data = await res.json();
+            return {
+              ...college,
+              city: college.city || data.city || "",
+              state: college.state || data.state || "",
+            };
+          } catch {
+            return college;
+          }
+        };
+        generatedColleges = await Promise.all(generatedColleges.map(fillMissingCityState));
 
         console.log("Generated colleges:", generatedColleges)
 
