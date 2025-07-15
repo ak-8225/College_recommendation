@@ -258,11 +258,11 @@ export default function InitialFormStep({
 
   // Fetch ranking data from the new sheet
   const fetchRankingData = async (): Promise<{
-    [key: string]: { rank_value: string; rank_provider_name: string }
+    [key: string]: { rank_value: string; rank_provider_name: string; ranking_type_name: string }[]
   }> => {
     try {
       const rankingUrl =
-        "https://docs.google.com/spreadsheets/d/e/2PACX-1vRIiXlBnG9Vh2Gkvwnz4FDwE-aD1gpB3uWNtsUgrk5HV5Jd89KM5V0Jeb0It7867pbGSt8iD-UvmJIE/pub?output=csv"
+        "https://docs.google.com/spreadsheets/d/e/2PACX-1vRkmC4IzWoxar8tQ0yoL1aXkwWzuvgEZJX6AZIQ3Ph0f7cQdADVKOsI84seuQPXcxko4TNTtJ-0UJVr/pub?output=csv"
 
       const response = await fetch(rankingUrl, {
         method: 'GET',
@@ -284,31 +284,40 @@ export default function InitialFormStep({
       const headers = parseCSVLine(lines[0])
       console.log("Ranking CSV headers:", headers)
 
-      const rankingData: { [key: string]: { rank_value: string; rank_provider_name: string } } = {}
+      // Use the same normalization as in findRankingData
+      function normalizeCollegeName(name: string) {
+        return String(name)
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, ''); // remove all non-alphanumeric
+      }
+
+      const rankingData: { [key: string]: { rank_value: string; rank_provider_name: string; ranking_type_name: string }[] } = {}
 
       lines.slice(1).forEach((line, index) => {
         const values = parseCSVLine(line)
         const collegeNameIndex = headers.findIndex(
-          (h) => h.toLowerCase().includes("college") || h.toLowerCase().includes("university"),
+          (h) => h.toLowerCase().includes("university_name")
         )
         const rankValueIndex = headers.findIndex((h) => h.toLowerCase().includes("rank_value"))
         const rankProviderIndex = headers.findIndex((h) => h.toLowerCase().includes("rank_provider_name"))
+        const rankingTypeIndex = headers.findIndex((h) => h.toLowerCase().includes("ranking_type_name"))
 
-        if (collegeNameIndex >= 0 && rankValueIndex >= 0 && rankProviderIndex >= 0) {
+        if (collegeNameIndex >= 0 && rankValueIndex >= 0 && rankProviderIndex >= 0 && rankingTypeIndex >= 0) {
           const collegeName = values[collegeNameIndex]?.trim() || ""
           const rankValue = values[rankValueIndex]?.trim() || ""
           const rankProvider = values[rankProviderIndex]?.trim() || ""
+          const rankingType = values[rankingTypeIndex]?.trim() || ""
 
           if (collegeName && rankValue && rankProvider) {
-            const cleanCollegeName = collegeName.toLowerCase().trim()
-            rankingData[cleanCollegeName] = {
+            const normalizedCollegeName = normalizeCollegeName(collegeName)
+            if (!rankingData[normalizedCollegeName]) {
+              rankingData[normalizedCollegeName] = []
+            }
+            rankingData[normalizedCollegeName].push({
               rank_value: rankValue,
               rank_provider_name: rankProvider,
-            }
-            rankingData[collegeName] = {
-              rank_value: rankValue,
-              rank_provider_name: rankProvider,
-            }
+              ranking_type_name: rankingType,
+            })
           }
         }
       })
@@ -355,31 +364,40 @@ export default function InitialFormStep({
   // Helper function to find ranking data for a college
   const findRankingData = (
     collegeName: string,
-    rankingData: { [key: string]: { rank_value: string; rank_provider_name: string } },
-  ): { rank_value: string; rank_provider_name: string } => {
-    if (!collegeName) return { rank_value: "N/A", rank_provider_name: "N/A" }
+    rankingData: { [key: string]: { rank_value: string; rank_provider_name: string; ranking_type_name?: string }[] },
+  ): { rank_value: string; rank_provider_name: string; ranking_type_name?: string } => {
+    if (!collegeName) return { rank_value: "N/A", rank_provider_name: "N/A", ranking_type_name: "N/A" };
 
-    // Try exact match first
-    if (rankingData[collegeName]) {
-      return rankingData[collegeName]
+    function normalizeCollegeName(name: string) {
+      return String(name)
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, ''); // remove all non-alphanumeric
     }
 
-    // Try lowercase match
-    const lowerName = collegeName.toLowerCase().trim()
-    if (rankingData[lowerName]) {
-      return rankingData[lowerName]
+    const normalizedInput = normalizeCollegeName(collegeName);
+
+    // Find all matches for this college
+    const matches = Object.entries(rankingData)
+      .filter(([key]) => key.includes(normalizedInput))
+      .flatMap(([, values]) => values);
+
+    // Prefer QS Rankings (World Ranking)
+    const qsMatch = matches.find(row =>
+      row.rank_provider_name?.toLowerCase().includes('qs') &&
+      row.ranking_type_name?.toLowerCase().includes('world')
+    );
+    if (qsMatch && qsMatch.rank_value && qsMatch.rank_value !== 'N/A') {
+      return qsMatch;
     }
 
-    // Try partial matching
-    for (const [key, value] of Object.entries(rankingData)) {
-      if (key.toLowerCase().includes(lowerName) || lowerName.includes(key.toLowerCase())) {
-        console.log(`Found ranking match: "${collegeName}" matched with "${key}"`)
-        return value
-      }
+    // Otherwise, return any available ranking
+    const anyMatch = matches.find(row => row.rank_value && row.rank_value !== 'N/A');
+    if (anyMatch) {
+      return anyMatch;
     }
 
-    console.log(`No ranking data found for college: "${collegeName}"`)
-    return { rank_value: "N/A", rank_provider_name: "N/A" }
+    // Fallback
+    return { rank_value: "N/A", rank_provider_name: "N/A", ranking_type_name: "N/A" };
   }
 
   // Helper function to normalize phone numbers

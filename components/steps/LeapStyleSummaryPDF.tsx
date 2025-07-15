@@ -1,6 +1,4 @@
 import React from "react";
-import { ComposedChart, CartesianGrid, XAxis, YAxis, Line, ResponsiveContainer, PieChart, Pie, Cell, Legend, Tooltip as RechartsTooltip } from 'recharts';
-import logo from '../../public/logo.png'; // Add this import if you have a logo
 
 interface College {
   name: string;
@@ -33,9 +31,10 @@ interface LeapStyleSummaryPDFProps {
   roiData: { name: string; roi: number }[];
   usps: string[];
   relationshipManager?: { name: string; phone: string };
+  employmentData: { rate: number; salary: number }[];
 }
 
-const LeapStyleSummaryPDF: React.FC<LeapStyleSummaryPDFProps & { employmentData: any[] }> = ({
+const LeapStyleSummaryPDF: React.FC<LeapStyleSummaryPDFProps> = ({
   meetingDate,
   counselor,
   student,
@@ -52,233 +51,268 @@ const LeapStyleSummaryPDF: React.FC<LeapStyleSummaryPDFProps & { employmentData:
   relationshipManager,
   employmentData,
 }) => {
+  // Helper function to format tuition fee
+  const formatTuitionFee = (fee?: string) => {
+    if (!fee) return 'N/A';
+    const num = typeof fee === 'number' ? fee : parseFloat(fee.replace(/[^.0-9]/g, ''));
+    return num ? `₹${num.toLocaleString('en-IN')} per year` : 'N/A';
+  };
+
+  // Helper function to calculate break-even years
+  const calculateBreakEven = (roi?: string, index = 0) => {
+    const roiValue = (roi && !isNaN(parseFloat(roi)) && parseFloat(roi) <= 6) 
+      ? parseFloat(roi) 
+      : (3.2 + index * 0.3);
+    
+    if (roiValue > 6) return 'N/A';
+    
+    if (roiValue < 4) {
+      const min = (roiValue - 0.2).toFixed(1);
+      const max = (roiValue + 0.3).toFixed(1);
+      return `${min} - ${max} Years`;
+    }
+    
+    const min = Math.floor(roiValue);
+    const max = Math.ceil(roiValue);
+    return `${min} - ${max} Years`;
+  };
+
+  // Helper function to calculate average break-even
+  const getAverageBreakEven = () => {
+    if (!roiData || !roiData.length) return 'N/A';
+    
+    const validRois = roiData.filter(r => !isNaN(r.roi) && r.roi <= 6);
+    if (!validRois.length) return 'N/A';
+    
+    const min = Math.min(...validRois.map(r => r.roi));
+    const max = Math.max(...validRois.map(r => r.roi));
+    return `${min.toFixed(1)} - ${max.toFixed(1)} Years`;
+  };
+
+  // Helper function to calculate employment rate
+  const getEmploymentRate = () => {
+    if (!employmentData || !employmentData.length) return 'N/A';
+    const avg = employmentData.reduce((sum, e) => sum + (e.rate || 0), 0) / employmentData.length;
+    return `${avg.toFixed(0)}%`;
+  };
+
+  // Helper function to calculate average salary
+  const getAverageSalary = () => {
+    if (!employmentData || !employmentData.length) return 'N/A';
+    const avg = employmentData.reduce((sum, e) => sum + (e.salary || 0), 0) / employmentData.length;
+    return `£${(avg / 1000).toFixed(1)}K`;
+  };
+
+  // Helper function to get average package display
+  const getAvgPackage = (college: College) => {
+    const val = college.avgSalary || college.avgPackage;
+    if (!val || val === 'N/A' || val === 'NA' || val === '-') {
+      return '₹26.0L';
+    }
+    return val;
+  };
+
   return (
-    <div style={{
-      fontFamily: 'Inter, Arial, sans-serif',
-      background: 'linear-gradient(135deg, #f8fafc 0%, #e0e7ef 100%)',
-      color: '#222',
-      width: '100vw',
-      minHeight: '100vh',
-      padding: 0,
-      margin: 0,
-      boxSizing: 'border-box',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'stretch',
-      overflowX: 'hidden',
-    }}>
-      {/* 1. Header Section */}
-      <div style={{
-        width: '100vw',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        background: 'linear-gradient(90deg, #2563eb 0%, #6366f1 100%)',
-        color: '#fff',
-        borderRadius: '0 0 24px 24px',
-        padding: '32px 0 20px 0',
-        marginBottom: 0,
-        boxSizing: 'border-box',
-        boxShadow: '0 4px 24px #6366f133',
-        marginTop: 0,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', height: 64, minWidth: 120 }}>
-          <div style={{ background: '#fff', borderRadius: 16, padding: 8, marginLeft: 32, display: 'flex', alignItems: 'center', boxShadow: '0 2px 8px #6366f122' }}>
-            <img src="/logo.png" alt="Leap Scholar Logo" style={{ height: 48, width: 'auto', display: 'block' }} />
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 font-sans">
+      {/* Header Section */}
+      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-b-3xl shadow-lg mb-8">
+        <div className="flex justify-between items-center px-8 py-6">
+          <div className="flex items-center">
+            <div className="bg-white rounded-2xl p-2 shadow-md">
+              <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-xl">
+                L
+              </div>
+            </div>
+            <div className="ml-4">
+              <h1 className="text-2xl font-bold">Leap Scholar</h1>
+              <p className="text-blue-100 text-sm">Study Abroad Counseling</p>
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-lg font-semibold mb-1">
+              Counselor: {counselor.name}
+            </div>
+            {counselor.phone && (
+              <div className="text-blue-100 text-sm mb-1">
+                Phone: {counselor.phone}
+              </div>
+            )}
+            <div className="text-base">
+              Meeting Date: {meetingDate}
+            </div>
           </div>
         </div>
-        <div style={{ fontWeight: 500, fontSize: 20, textAlign: 'right', lineHeight: 1.5, marginRight: 32 }}>
-          <div style={{ fontWeight: 700, fontSize: 22, marginBottom: 2 }}>Counselor: <span style={{ fontWeight: 500 }}>{counselor.name}</span></div>
-          {counselor.phone && (
-            <div style={{ fontWeight: 400, fontSize: 16, color: '#e0e7ef', marginBottom: 2 }}>Phone: {counselor.phone}</div>
-          )}
-          <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 2 }}>Meeting Date: <span style={{ fontWeight: 500 }}>{meetingDate}</span></div>
+      </div>
+
+      {/* Student Information */}
+      <div className="px-8 mb-8">
+        <div className="text-blue-600 font-semibold text-lg mb-2">Student</div>
+        <div className="text-3xl font-bold text-gray-800 mb-2">{student.name}</div>
+        <div className="text-xl text-indigo-600 font-semibold">{student.status}</div>
+      </div>
+
+      {/* Purpose Section */}
+      <div className="px-8 mb-8">
+        <div className="bg-blue-50 rounded-xl p-6 border-l-4 border-blue-500">
+          <p className="text-gray-700 italic text-lg leading-relaxed">{purpose}</p>
         </div>
       </div>
-      {/* 2. Student Section */}
-      <div style={{ width: '100%', padding: '32px 0 0 32px', boxSizing: 'border-box', marginBottom: 0 }}>
-        <div style={{ fontWeight: 900, fontSize: 22, color: '#2563eb', marginBottom: 4 }}>Student:</div>
-        <div style={{ fontWeight: 800, fontSize: 32, color: '#222', marginBottom: 2 }}>{student.name}</div>
-        <div style={{ fontWeight: 700, fontSize: 20, color: '#6366f1', marginBottom: 0 }}>{student.status}</div>
-      </div>
-      {/* 3. Purpose/Intro Section */}
-      <div style={{ width: '100%', margin: '32px 0 0 0', paddingLeft: 32, paddingRight: 32 }}>
-        <div style={{ background: '#e0e7ef', borderRadius: 12, padding: '14px 24px', fontSize: 16, fontStyle: 'italic', color: '#334155', fontWeight: 400, marginBottom: 0 }}>{purpose}</div>
-      </div>
-      {/* 4. Liked Colleges Section */}
-      <div style={{ width: '100%', margin: '36px 0 10px 0', fontWeight: 800, fontSize: 26, color: '#2563eb', letterSpacing: -0.5, textAlign: 'left', borderBottom: '2px solid #6366f1', paddingBottom: 8, paddingLeft: 32 }}>Liked Colleges</div>
-      <div style={{
-        width: '100vw',
-        display: 'grid',
-        gridTemplateColumns: 'repeat(4, 1fr)',
-        gap: 32,
-        margin: '0 0 36px 0',
-        justifyItems: 'center',
-        alignItems: 'stretch',
-        paddingLeft: 32,
-        paddingRight: 32,
-      }}>
-        {shortlistedColleges.map((col, i) => {
-          let tuitionFeeDisplay = 'N/A';
-          if (col.tuitionFee) {
-            const num = typeof col.tuitionFee === 'number' ? col.tuitionFee : parseFloat(col.tuitionFee.replace(/[^.0-9]/g, ''));
-            tuitionFeeDisplay = num ? `₹${num.toLocaleString('en-IN')} INR per year` : 'N/A';
-          }
-          // Use col.roi if present and valid, else fallback to calculated value
-          let breakEvenValue = (col.roi && !isNaN(parseFloat(col.roi)) && parseFloat(col.roi) <= 6) ? parseFloat(col.roi) : (3.2 + i * 0.3);
-          let breakEvenYears = '';
-          if (breakEvenValue > 6) {
-            breakEvenYears = 'N/A';
-          } else if (breakEvenValue < 4) {
-            const min = (breakEvenValue - 0.2).toFixed(1);
-            const max = (breakEvenValue + 0.3).toFixed(1);
-            if (parseFloat(min) > 6 || parseFloat(max) > 6) {
-              breakEvenYears = 'N/A';
-            } else {
-              breakEvenYears = `${min} - ${max} Years`;
-            }
-          } else {
-            const min = Math.floor(breakEvenValue);
-            const max = Math.ceil(breakEvenValue);
-            if (min > 6 || max > 6) {
-              breakEvenYears = 'N/A';
-            } else {
-              breakEvenYears = `${min} - ${max} Years`;
-            }
-          }
-          return (
-            <div key={i} style={{
-              background: '#fff',
-              border: '2px solid #2563eb22',
-              borderRadius: 18,
-              boxShadow: '0 4px 16px #2563eb11',
-              padding: 24,
-              width: '100%',
-              minWidth: 0,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 14,
-              position: 'relative',
-              marginBottom: 0,
-              justifyContent: 'space-between',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 8 }}>
-                <div style={{ width: 48, height: 48, background: 'linear-gradient(135deg, #6366f1 0%, #2563eb 100%)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 24, boxShadow: '0 2px 8px #6366f122' }}>{col.name.charAt(0)}</div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700, fontSize: 18, color: '#222' }}>{col.name}</div>
-                  <div style={{ fontSize: 13, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4 }}>{col.flag} {col.country}</div>
-                </div>
-                <div style={{ color: '#ef4444', fontSize: 22, fontWeight: 700, marginLeft: 8 }}>&#10084;</div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, borderTop: '1px solid #e0e7ef', paddingTop: 10 }}>
-                <div>
-                  <div style={{ fontSize: 12, color: '#64748b' }}>Tuition Fee</div>
-                  <div style={{ fontWeight: 600, fontSize: 15, color: '#222' }}>{tuitionFeeDisplay}</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 12, color: '#64748b' }}>Avg Package</div>
-                  <div style={{ fontWeight: 600, fontSize: 15, color: '#222' }}>{(() => { let val = col.avgSalary || col.avgPackage; if (!val || val === 'N/A' || val === 'NA' || val === '-') { val = '₹26.0L'; } return val; })()}</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 12, color: '#64748b' }}>Break-even</div>
-                  <div style={{ fontWeight: 600, fontSize: 15, color: '#059669' }}>{breakEvenYears}</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 12, color: '#64748b' }}>Ranking</div>
-                  <div style={{ fontWeight: 600, fontSize: 15, color: '#222' }}>#{col.ranking}</div>
+
+      {/* Shortlisted Colleges */}
+      <div className="px-8 mb-12">
+        <h2 className="text-2xl font-bold text-blue-600 mb-6 pb-2 border-b-2 border-blue-200">
+          Shortlisted Colleges
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {shortlistedColleges.map((college, index) => (
+            <div key={index} className="bg-white rounded-2xl border-2 border-blue-100 shadow-lg hover:shadow-xl transition-shadow duration-300 overflow-hidden">
+              {/* College Header */}
+              <div className="p-6 pb-4">
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-md">
+                    {college.name.charAt(0)}
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-bold text-gray-800 text-lg leading-tight">{college.name}</h3>
+                    <p className="text-gray-500 text-sm flex items-center gap-1">
+                      <span>{college.flag}</span>
+                      <span>{college.country}</span>
+                    </p>
+                  </div>
+                  <div className="text-red-500 text-xl">♥</div>
                 </div>
               </div>
-              {/* USPs */}
-              {col.usps && Array.isArray(col.usps) && col.usps.length > 0 && (
-                <ul style={{ margin: '8px 0 0 0', paddingLeft: 18, fontSize: 13, color: '#334155' }}>
-                  {col.usps.map((usp, idx) => <li key={idx} style={{ marginBottom: 2 }}><b>USP:</b> {usp}</li>)}
-                </ul>
-              )}
+
+              {/* College Details */}
+              <div className="px-6 pb-6">
+                <div className="grid grid-cols-2 gap-4 border-t border-gray-100 pt-4">
+                  <div>
+                    <div className="text-xs text-gray-500 mb-1">Tuition Fee</div>
+                    <div className="font-semibold text-gray-800 text-sm">
+                      {formatTuitionFee(college.tuitionFee)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-500 mb-1">Avg Package</div>
+                    <div className="font-semibold text-gray-800 text-sm">
+                      {getAvgPackage(college)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-500 mb-1">Break-even</div>
+                    <div className="font-semibold text-green-600 text-sm">
+                      {calculateBreakEven(college.roi, index)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-500 mb-1">Ranking</div>
+                    <div className="font-semibold text-gray-800 text-sm">
+                      #{college.ranking || 'N/A'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* USPs */}
+                {college.usps && college.usps.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-gray-100">
+                    <div className="text-xs text-gray-500 mb-2">Key Highlights</div>
+                    <ul className="space-y-1">
+                      {college.usps.slice(0, 2).map((usp, idx) => (
+                        <li key={idx} className="text-xs text-gray-600 flex items-start gap-1">
+                          <span className="text-blue-500 mt-1">•</span>
+                          <span>{usp}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
             </div>
-          );
-        })}
-      </div>
-      {/* 5. Summary Metrics Section */}
-      <div style={{
-        width: '100vw',
-        display: 'flex',
-        gap: 32,
-        margin: '36px 0 36px 0',
-        justifyContent: 'space-between',
-        paddingLeft: 32,
-        paddingRight: 32,
-      }}>
-        {/* Avg Break-even */}
-        <div style={{ flex: 1, minWidth: 0, maxWidth: 180, aspectRatio: '1 / 1', background: 'linear-gradient(120deg, #e0e7ff 0%, #dbeafe 100%)', borderRadius: 24, padding: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 12px #2563eb11' }}>
-          <div style={{ color: '#2563eb', fontWeight: 700, fontSize: 18, marginBottom: 6, textAlign: 'center' }}>Avg Break-even</div>
-          <div style={{ color: '#1e40af', fontWeight: 900, fontSize: 32, textAlign: 'center' }}>{(() => {
-            if (roiData && roiData.length) {
-              let min = Math.min(...roiData.map(r => r.roi));
-              let max = Math.max(...roiData.map(r => r.roi));
-              if (isNaN(min) || min > 6) return 'N/A';
-              if (max > 6) max = 6;
-              return `${min.toFixed(1)} - ${max.toFixed(1)} Years`;
-            }
-            return 'N/A';
-          })()}</div>
-        </div>
-        {/* Employment Rate */}
-        <div style={{ flex: 1, minWidth: 0, maxWidth: 180, aspectRatio: '1 / 1', background: 'linear-gradient(120deg, #d1fae5 0%, #f0fdf4 100%)', borderRadius: 24, padding: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 12px #05966911' }}>
-          <div style={{ color: '#059669', fontWeight: 700, fontSize: 18, marginBottom: 6, textAlign: 'center' }}>Employment Rate</div>
-          <div style={{ color: '#047857', fontWeight: 900, fontSize: 32, textAlign: 'center' }}>{(() => {
-            if (employmentData && employmentData.length) {
-              const avg = employmentData.reduce((sum, e) => sum + (e.rate || 0), 0) / employmentData.length;
-              return `${avg.toFixed(0)}%`;
-            }
-            return 'N/A';
-          })()}</div>
-        </div>
-        {/* Avg. Salary */}
-        <div style={{ flex: 1, minWidth: 0, maxWidth: 180, aspectRatio: '1 / 1', background: 'linear-gradient(120deg, #ede9fe 0%, #f3e8ff 100%)', borderRadius: 24, padding: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 12px #a21caf11' }}>
-          <div style={{ color: '#a21caf', fontWeight: 700, fontSize: 18, marginBottom: 6, textAlign: 'center' }}>Avg. Salary</div>
-          <div style={{ color: '#7c3aed', fontWeight: 900, fontSize: 32, textAlign: 'center' }}>{(() => {
-            if (employmentData && employmentData.length) {
-              const avg = employmentData.reduce((sum, e) => sum + (e.salary || 0), 0) / employmentData.length;
-              return `£${(avg / 1000).toFixed(1)}K`;
-            }
-            return 'N/A';
-          })()}</div>
-        </div>
-        {/* Liked Universities */}
-        <div style={{ flex: 1, minWidth: 0, maxWidth: 180, aspectRatio: '1 / 1', background: 'linear-gradient(120deg, #fee2e2 0%, #fef2f2 100%)', borderRadius: 24, padding: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 12px #dc262611' }}>
-          <div style={{ color: '#dc2626', fontWeight: 700, fontSize: 18, marginBottom: 6, textAlign: 'center' }}>Liked Universities</div>
-          <div style={{ color: '#b91c1c', fontWeight: 900, fontSize: 32, textAlign: 'center' }}>{shortlistedColleges.length}</div>
+          ))}
         </div>
       </div>
-      {/* 6. Data Points Section */}
-      <div style={{ width: '100vw', margin: '48px 0 24px 0', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 32, justifyItems: 'center', alignItems: 'stretch', paddingLeft: 32, paddingRight: 32 }}>
-        {roiData && roiData.length > 0 && roiData.map((item, idx) => {
-          let roiDisplay = (isNaN(item.roi) || item.roi > 6) ? 'N/A' : `${item.roi.toFixed(1)} Years`;
-          return (
-            <div key={idx} style={{ background: '#f8fafc', border: '2px solid #2563eb22', borderRadius: 18, boxShadow: '0 4px 16px #2563eb11', padding: 24, minWidth: 220, maxWidth: 260, flex: '1 1 220px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-              <div style={{ fontWeight: 700, fontSize: 18, color: '#2563eb', marginBottom: 2 }}>{item.name}</div>
-              <div style={{ fontSize: 14, color: '#64748b', marginBottom: 2 }}>Break-even</div>
-              <div style={{ fontWeight: 700, fontSize: 22, color: '#059669', marginBottom: 2 }}>{roiDisplay}</div>
-              {employmentData && employmentData[idx] && (
-                <>
-                  <div style={{ fontSize: 14, color: '#64748b', marginTop: 6 }}>Employment Rate</div>
-                  <div style={{ fontWeight: 700, fontSize: 18, color: '#047857' }}>{employmentData[idx].rate ? `${employmentData[idx].rate}%` : 'N/A'}</div>
-                  <div style={{ fontSize: 14, color: '#64748b', marginTop: 6 }}>Avg. Salary</div>
-                  <div style={{ fontWeight: 700, fontSize: 18, color: '#7c3aed' }}>{employmentData[idx].salary ? `£${(employmentData[idx].salary / 1000).toFixed(1)}K` : 'N/A'}</div>
-                </>
-              )}
-            </div>
-          );
-        })}
-      </div>
-      {/* 7. Footer */}
-      <div style={{ width: '100vw', borderTop: '1px solid #e0e7ef', paddingTop: 16, marginTop: 18, fontSize: 14, textAlign: 'left', paddingLeft: 32, paddingRight: 32, paddingBottom: 32, background: 'linear-gradient(0deg, #f8fafc 80%, #fff 100%)' }}>
-        <div style={{ marginTop: 10, color: '#2563eb', fontWeight: 700, fontSize: 16, wordBreak: 'break-word', whiteSpace: 'pre-line' }}>
-          For best financial support, contact <a href="https://yocket.com/finances/inside-loan-sales?source=loaninternal_webinar" style={{ color: '#2563eb', textDecoration: 'underline', wordBreak: 'break-all' }}>@https://yocket.com/finances/inside-loan-sales?source=loaninternal_webinar</a>
+
+      {/* Summary Metrics */}
+      <div className="px-8 mb-12">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+          <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-6 text-center shadow-md">
+            <div className="text-blue-600 font-semibold text-sm mb-2">Avg Break-even</div>
+            <div className="text-blue-800 font-bold text-2xl">{getAverageBreakEven()}</div>
+          </div>
+          <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl p-6 text-center shadow-md">
+            <div className="text-green-600 font-semibold text-sm mb-2">Employment Rate</div>
+            <div className="text-green-800 font-bold text-2xl">{getEmploymentRate()}</div>
+          </div>
+          <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl p-6 text-center shadow-md">
+            <div className="text-purple-600 font-semibold text-sm mb-2">Avg. Salary</div>
+            <div className="text-purple-800 font-bold text-2xl">{getAverageSalary()}</div>
+          </div>
+          <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-2xl p-6 text-center shadow-md">
+            <div className="text-red-600 font-semibold text-sm mb-2">Total Universities</div>
+            <div className="text-red-800 font-bold text-2xl">{shortlistedColleges.length}</div>
+          </div>
         </div>
+      </div>
+
+      {/* ROI Data Points */}
+      {roiData && roiData.length > 0 && (
+        <div className="px-8 mb-12">
+          <h2 className="text-2xl font-bold text-blue-600 mb-6">University Analytics</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {roiData.map((item, idx) => (
+              <div key={idx} className="bg-white rounded-2xl border border-gray-200 shadow-lg p-6 text-center">
+                <h3 className="font-bold text-blue-600 text-lg mb-4">{item.name}</h3>
+                
+                <div className="space-y-4">
+                  <div>
+                    <div className="text-gray-500 text-sm mb-1">Break-even</div>
+                    <div className="font-bold text-green-600 text-xl">
+                      {isNaN(item.roi) || item.roi > 6 ? 'N/A' : `${item.roi.toFixed(1)} Years`}
+                    </div>
+                  </div>
+                  
+                  {employmentData && employmentData[idx] && (
+                    <>
+                      <div>
+                        <div className="text-gray-500 text-sm mb-1">Employment Rate</div>
+                        <div className="font-bold text-green-700 text-lg">
+                          {employmentData[idx].rate ? `${employmentData[idx].rate}%` : 'N/A'}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-gray-500 text-sm mb-1">Avg. Salary</div>
+                        <div className="font-bold text-purple-600 text-lg">
+                          {employmentData[idx].salary ? `£${(employmentData[idx].salary / 1000).toFixed(1)}K` : 'N/A'}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Footer */}
+      <div className="border-t border-gray-200 bg-gradient-to-r from-slate-50 to-blue-50 px-8 py-6">
+        <div className="text-blue-600 font-semibold text-base">
+          For best financial support, contact:{' '}
+          <a 
+            href="https://yocket.com/finances/inside-loan-sales?source=loaninternal_webinar" 
+            className="text-blue-600 underline hover:text-blue-800 transition-colors break-all"
+          >
+            @https://yocket.com/finances/inside-loan-sales?source=loaninternal_webinar
+          </a>
+        </div>
+        {relationshipManager && (
+          <div className="mt-4 text-blue-600 font-semibold">
+            Relationship Manager: {relationshipManager.name} - {relationshipManager.phone}
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
-export default LeapStyleSummaryPDF; 
+export default LeapStyleSummaryPDF;
