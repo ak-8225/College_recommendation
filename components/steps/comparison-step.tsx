@@ -21,6 +21,8 @@ interface ComparisonStepProps {
   rankingData: { [key: string]: { rank_value: string; rank_provider_name: string } }
   onCollegeToggle: (collegeId: string) => void;
   userPhone: string;
+  intendedMajor?: string;
+  courseName?: string;
 }
 
 export default function ComparisonStep({
@@ -34,6 +36,8 @@ export default function ComparisonStep({
   rankingData = {},
   onCollegeToggle,
   userPhone,
+  intendedMajor,
+  courseName,
 }: ComparisonStepProps) {
   const [selectedTheme, setSelectedTheme] = useState("all")
   // New: State to store fetched metrics for each college
@@ -73,6 +77,43 @@ export default function ComparisonStep({
     });
   }, [colleges, fallbackTuitionFees, userPhone]);
 
+  // Move these to the top level, after other useState hooks
+  const [avgPackageSources, setAvgPackageSources] = useState<{ [collegeId: string]: { value: string; sourceUrl: string; sourceLabel: string } }>({});
+  const [breakEvenSources, setBreakEvenSources] = useState<{ [collegeId: string]: { value: string; sourceUrl: string; sourceLabel: string } }>({});
+
+  // Move selectedColleges here so it is initialized before any useEffect or function that uses it
+  const selectedColleges = colleges.filter((college) => selectedForComparison.includes(college.id))
+
+  // Fetch sources for selected colleges on mount or when colleges change
+  useEffect(() => {
+    async function fetchAllSources() {
+      for (const college of selectedColleges) {
+        // Avg Package
+        if (!avgPackageSources[college.id]) {
+          const res = await fetch("/api/get-avg-package-source", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ college: college.name }),
+          });
+          const data = await res.json();
+          setAvgPackageSources(prev => ({ ...prev, [college.id]: data }));
+        }
+        // Break-even
+        if (!breakEvenSources[college.id]) {
+          const res = await fetch("/api/get-breakeven-source", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ college: college.name }),
+          });
+          const data = await res.json();
+          setBreakEvenSources(prev => ({ ...prev, [college.id]: data }));
+        }
+      }
+    }
+    if (selectedColleges.length > 0) fetchAllSources();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedColleges]);
+
   const themes = {
     all: {
       name: "All Categories",
@@ -107,8 +148,6 @@ export default function ComparisonStep({
       textColor: "text-orange-700",
     },
   }
-
-  const selectedColleges = colleges.filter((college) => selectedForComparison.includes(college.id))
 
   // Fetch metrics for each selected college
   useEffect(() => {
@@ -589,6 +628,24 @@ export default function ComparisonStep({
     "International Student Ratio": "HESA / University Enrollment Data",
   }
 
+  // Add a static mapping of source URLs for each metric label
+  const metricSourceLinks: { [label: string]: string } = {
+    "Graduate Employability Rate": "https://www.topuniversities.com/university-rankings/employability-rankings/2024",
+    "Average Starting Salary": "https://www.topuniversities.com/university-rankings/employability-rankings/2024",
+    "Career Progression Rate": "https://www.universitycareerservices.com/alumni-tracking",
+    "Industry Network Score": "https://www.topuniversities.com/university-rankings/employability-rankings/2024",
+    "Annual Tuition Fees": "https://www.study.eu/article/university-tuition-fees-in-europe",
+    "Living Costs (Annual)": "https://www.ukcisa.org.uk/Information--Advice/Living-in-the-UK/Living-costs",
+    "Accommodation Costs": "https://www.universityliving.com/india",
+    "Transportation Costs": "https://www.numbeo.com/cost-of-living/",
+    "Scholarship Availability": "https://www.scholarships.com/",
+    "Total Cost of Study": "https://www.topuniversities.com/student-info/student-finance/how-much-does-it-cost-study-abroad",
+    "University Ranking": "https://www.topuniversities.com/university-rankings/world-university-rankings/2024",
+    "Student Satisfaction Score": "https://www.officeforstudents.org.uk/advice-and-guidance/student-information-and-data/national-student-survey-nss/",
+    "Research Quality Rating": "https://www.ref.ac.uk/",
+    "International Student Ratio": "https://www.hesa.ac.uk/data-and-analysis/students/where-from",
+  };
+
   // Helper to get currency symbol by country
   function getCurrencySymbol(country: string) {
     if (!country) return '₹';
@@ -927,7 +984,15 @@ export default function ComparisonStep({
               <div className={`w-10 h-10 bg-gradient-to-br ${college.color} rounded-lg flex items-center justify-center text-white font-bold text-lg`}>{college.name.charAt(0)}</div>
               <div>
                 <div className="font-semibold text-gray-900">{college.name}</div>
-                <div className="text-xs text-gray-500">{metricsLoading[college.id] ? <Skeleton className="w-16 h-4" /> : "Ready"}</div>
+                <div className="text-xs text-gray-500">{intendedMajor && (
+                    <span className="italic text-xs text-gray-500 mt-0.5">{intendedMajor}</span>
+                  )}
+                  {college.liked && (
+                    <span className="flex items-center ml-1 h-5">
+                      <Heart className="w-5 h-5 min-w-[20px] min-h-[20px] text-red-500 fill-red-500" />
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           ))}
@@ -1031,8 +1096,11 @@ export default function ComparisonStep({
                           >
                             {college.name.charAt(0)}
                           </div>
-                          <span className="text-sm flex items-center justify-center gap-1">
+                          <span className="text-sm flex flex-col items-center justify-center gap-1">
                             {college.name}
+                            {intendedMajor && (
+                                <span className="italic text-xs text-gray-500 mt-0.5">{intendedMajor}</span>
+                              )}
                             {college.liked && (
                               <span className="flex items-center ml-1 h-5">
                                 <Heart className="w-5 h-5 min-w-[20px] min-h-[20px] text-red-500 fill-red-500" />
@@ -1068,14 +1136,6 @@ export default function ComparisonStep({
                       <td className="sticky left-0 z-20 bg-white p-4">
                         <span className="font-medium text-gray-900 flex items-center gap-2 relative">
                           {metric.label}
-                          <Tooltip>
-                            <TooltipTrigger>
-                              <Info className="w-4 h-4 text-gray-400 hover:text-gray-600" />
-                            </TooltipTrigger>
-                            <TooltipContent className="max-w-xs" side="bottom">
-                              <span className="text-xs text-gray-700">{metricSources[metric.label] || "Estimated from regional averages / OpenAI"}</span>
-                            </TooltipContent>
-                          </Tooltip>
                         </span>
                       </td>
                       {selectedColleges.map((college, idx) => {
@@ -1131,6 +1191,39 @@ export default function ComparisonStep({
                               }`}
                             >
                               {value}
+                              {/* Always show info button with a working link for every metric */}
+                              {(() => {
+                                let sourceUrl = null;
+                                let sourceLabel = null;
+                                if (metric.label === "Average Starting Salary" && avgPackageSources[college.id]?.sourceUrl) {
+                                  sourceUrl = avgPackageSources[college.id].sourceUrl;
+                                  sourceLabel = avgPackageSources[college.id].sourceLabel || "Source";
+                                } else if (metric.label === "Break-even" && breakEvenSources[college.id]?.sourceUrl) {
+                                  sourceUrl = breakEvenSources[college.id].sourceUrl;
+                                  sourceLabel = breakEvenSources[college.id].sourceLabel || "Source";
+                                }
+                                // Fallback to static source link if dynamic not available
+                                if (!sourceUrl) {
+                                  sourceUrl = metricSourceLinks[metric.label] || "https://www.topuniversities.com/";
+                                  sourceLabel = metricSources[metric.label] || "Source";
+                                }
+                                return (
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center cursor-pointer ml-1 align-middle">
+                                          <Info className="w-4 h-4 text-gray-400 hover:text-gray-600" />
+                                        </a>
+                                      </TooltipTrigger>
+                                      <TooltipContent className="max-w-xs z-50" side="bottom" align="center">
+                                        <a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-700 underline">
+                                          {sourceLabel}
+                                        </a>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                );
+                              })()}
                             </span>
                           </td>
                         );
@@ -1163,6 +1256,12 @@ export default function ComparisonStep({
       </motion.div>
     </TooltipProvider>
   )
+}
+
+function formatPriority(priority: string) {
+  return priority.toLowerCase() === "roi"
+    ? "ROI"
+    : priority.charAt(0).toUpperCase() + priority.slice(1).replace(/_/g, " ");
 }
 
 // Helper to get average starting salary by country

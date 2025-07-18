@@ -269,6 +269,12 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
   );
 }
 
+function formatPriority(priority: string) {
+  return priority.toLowerCase() === "roi"
+    ? "ROI"
+    : priority.charAt(0).toUpperCase() + priority.slice(1).replace(/_/g, " ");
+}
+
 export default function SummaryStep({
   pageVariants,
   pageTransition,
@@ -1030,7 +1036,10 @@ export default function SummaryStep({
                         {college.name.charAt(0)}
                       </div>
                       <div className="flex-1">
-                        <h3 className="font-bold text-gray-900 text-lg leading-tight">{college.name}</h3>
+                        <h3 className="font-bold text-gray-900 text-2xl leading-tight mb-1">{college.name}</h3>
+                        {formData.courseName && (
+                          <div className="italic text-sm text-gray-500 mt-0.5">{formData.courseName}</div>
+                        )}
                         <p className="text-sm text-gray-600 flex items-center gap-1">
                           {college.flag} {college.country}
                         </p>

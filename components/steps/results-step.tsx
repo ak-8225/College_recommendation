@@ -39,6 +39,7 @@ interface ResultsStepProps {
     intendedMajor: string
     country: string
     phone: string
+    priorities?: string[]
   }
   onNext: (step: Step) => void
   onBack: () => void
@@ -273,6 +274,12 @@ function calculateFitScore({ college, allColleges, userBudget, priorities }: {
   // Clamp and convert to percentage
   fitScore = Math.max(0, Math.min(1, fitScore));
   return Math.round(fitScore * 100);
+}
+
+function formatPriority(priority: string) {
+  return priority.toLowerCase() === "roi"
+    ? "ROI"
+    : priority.charAt(0).toUpperCase() + priority.slice(1).replace(/_/g, " ");
 }
 
 export default function ResultsStep({
@@ -651,9 +658,9 @@ export default function ResultsStep({
                 avgSalary: college.avgPackage,
                 ranking: college.rankingData?.rank_value,
                 employmentRate: "", // College type does not have employabilityRate
-                priorities: (userProfile as any)?.priority || [],
                 budget: (userProfile as any)?.budget || "",
                 phone: userProfile?.phone || "",
+                roi: roiData[college.id],
               }),
             });
             const data = await res.json();
@@ -1007,8 +1014,22 @@ export default function ResultsStep({
           <h1 className="text-3xl md:text-4xl font-extrabold bg-gradient-to-r from-yellow-400 via-yellow-600 to-yellow-800 bg-clip-text text-transparent drop-shadow-lg tracking-tight mb-2 font-serif">
             College Recommendations for {userName || userProfile?.name || "Student"}
           </h1>
-          <p className="text-base text-gray-600 max-w-2xl mx-auto">
-            Based on your counseling profile and {intendedMajor} preferences for {country}
+          <p className="text-base text-gray-600 max-w-2xl mx-auto flex flex-wrap items-center justify-center gap-2">
+            <span>Based on your counseling profile and your selected priorities:</span>
+            {Array.isArray(userProfile?.priorities) && userProfile.priorities.length > 0 && (
+              <span className="flex flex-wrap items-center gap-2 ml-2">
+                {(userProfile.priorities || []).map((priority: string, idx: number, arr: string[]) => (
+                  <span
+                    key={priority}
+                    className="font-bold text-base md:text-lg text-[#bfa100]"
+                    style={{ textShadow: '0 1px 2px #f7e7b3' }}
+                  >
+                    {formatPriority(priority)}
+                    {idx < arr.length - 1 && <span className="mx-1 text-gray-400">·</span>}
+                  </span>
+                ))}
+              </span>
+            )}
           </p>
         </div>
 
@@ -1050,16 +1071,18 @@ export default function ResultsStep({
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <div className="flex flex-wrap items-center gap-2 mb-0.5">
-                                    <h3 className="text-lg font-bold text-gray-900 leading-tight mb-0.5 truncate">{college.name}</h3>
+                                    <h3 className="text-lg font-bold text-gray-900 leading-tight mb-0.5 truncate flex items-center gap-2">
+                                      {college.name}
+                                      {intendedMajor && (
+                                        <span className="italic text-sm text-gray-500 ml-2">{intendedMajor}</span>
+                                      )}
+                                    </h3>
                                     {/* Rank badge */}
                                     <span className="ml-2 px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 text-xs font-semibold border border-yellow-300 align-middle">
                                       {index + 1}{index === 0 ? 'st' : index === 1 ? 'nd' : index === 2 ? 'rd' : 'th'} College
                                     </span>
-                                    {college.courseName && (
-                                      <div className="text-sm text-gray-500 font-medium mb-0.5 truncate">{college.courseName}</div>
-                                    )}
                                     <p className="text-gray-600 flex items-center gap-1 text-xs mb-0.5">
-                                      <MapPin className="w-4 h-4" />
+                                      <MapPin className="w-4 h-4 align-middle" />
                                       {[
                                         college.city,
                                         college.state,
@@ -1072,7 +1095,7 @@ export default function ResultsStep({
                                     </p>
                                     <div className="flex flex-wrap items-center gap-1 mb-0.5">
                                       <div className="flex items-center gap-1 bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full text-xs font-medium">
-                                        <Star className="w-3 h-3 mr-1" />
+                                        <Star className="w-3 h-3 mr-1 align-middle" />
                                         Rank #{college.ranking}
                                         {college.rankingData?.rank_provider_name && (
                                           <span className="ml-1 text-gray-500 text-[10px] font-normal">{college.rankingData.rank_provider_name}</span>
@@ -1097,30 +1120,30 @@ export default function ResultsStep({
                                       <Button
                                         variant="outline"
                                         size="sm"
-                                        className="hover:bg-blue-50 hover:border-blue-300 transition-all duration-300 bg-transparent"
+                                        className="hover:bg-blue-50 hover:border-blue-300 transition-all duration-300 bg-transparent flex items-center"
                                         onClick={() => handleViewDetails(college)}
                                       >
-                                        <Eye className="w-4 h-4 mr-1" />
+                                        <Eye className="w-4 h-4 mr-1 align-middle" />
                                         View Details
                                       </Button>
                                       <Button
                                         onClick={() => onCollegeToggle(college.id)}
                                         variant={isSelected ? "default" : "outline"}
                                         size="sm"
-                                        className={`transition-all duration-300 ${
+                                        className={`transition-all duration-300 flex items-center ${
                                           isSelected
                                             ? "bg-red-600 hover:bg-red-700 text-white"
                                             : "hover:bg-red-50 hover:border-red-300"
                                         }`}
                                       >
-                                        <Heart className={`w-4 h-4 mr-1 ${college.liked ? "fill-current" : ""}`} />
+                                        <Heart className={`w-4 h-4 mr-1 align-middle ${college.liked ? "fill-current" : ""}`} />
                                         {college.liked ? "Liked" : "Like"}
                                       </Button>
                                       <Button
                                         onClick={() => handleComparisonToggle(college.id)}
                                         variant={selectedForComparison.includes(college.id) ? "default" : "outline"}
                                         size="sm"
-                                        className={`transition-all duration-300 ${
+                                        className={`transition-all duration-300 flex items-center ${
                                           selectedForComparison.includes(college.id)
                                             ? "bg-green-600 hover:bg-green-700 text-white border-2 border-green-600"
                                             : "hover:bg-green-50 hover:border-green-300 border-2 border-gray-300"
@@ -1142,7 +1165,7 @@ export default function ResultsStep({
                                               type="button"
                                               className="ml-1 w-7 h-7 flex items-center justify-center rounded-full bg-blue-100 border border-blue-300 text-blue-700 hover:bg-blue-200 hover:text-blue-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
                                             >
-                                              <Info className="w-4 h-4" />
+                                              <Info className="w-4 h-4 align-middle" />
                                             </button>
                                           </TooltipTrigger>
                                           <TooltipContent className="max-w-xs text-xs text-gray-800 z-50" side="bottom" align="center">
@@ -1240,15 +1263,30 @@ export default function ResultsStep({
                             </div>
                             {/* Right Section: Key Metrics and Notes */}
                             <div className="flex flex-col items-start min-w-[220px] max-w-[260px] ml-6">
-                              <div className="bg-gradient-to-br from-gray-50 to-white p-4 rounded-xl border w-full mb-3">
-                                <div className="text-xs text-blue-700 font-semibold mb-1">Key Metrics</div>
+                              <Card className="bg-gradient-to-br from-gray-50 to-white p-4 rounded-xl border w-full mb-3">
+                                <div className="text-xs text-blue-700 font-semibold mb-1">Net monthly spend</div>
                                 <div className="text-xs text-gray-700">
-                                  <div>Accommodation: ₹{getCostInfo(college)?.accommodation || 'N/A'} /month</div>
-                                  <div>Transportation: ₹{getCostInfo(college)?.transportation || 'N/A'} /month</div>
-                                  <div>Living: ₹{getCostInfo(college)?.living_expense || 'N/A'} /month</div>
-                                  <div>Part-time: ₹{getCostInfo(college)?.part_time_work || 'N/A'} /month</div>
+                                  {(() => {
+                                    const acc = parseInt(getCostInfo(college)?.accommodation?.toString().replace(/[^\d]/g, "")) || 0;
+                                    const trans = parseInt(getCostInfo(college)?.transportation?.toString().replace(/[^\d]/g, "")) || 0;
+                                    const living = parseInt(getCostInfo(college)?.living_expense?.toString().replace(/[^\d]/g, "")) || 0;
+                                    const partTime = parseInt(getCostInfo(college)?.part_time_work?.toString().replace(/[^\d]/g, "")) || 0;
+                                    const net = acc + trans + living - partTime;
+                                    return (
+                                      <div className="space-y-1">
+                                        <div>Accommodation: <span className="font-medium">₹{acc.toLocaleString()}</span> /month</div>
+                                        <div>Transportation: <span className="font-medium">₹{trans.toLocaleString()}</span> /month</div>
+                                        <div>Living: <span className="font-medium">₹{living.toLocaleString()}</span> /month</div>
+                                        <div>Part-time: <span className="font-medium">₹{partTime.toLocaleString()}</span> /month</div>
+                                        <div className="border-t border-gray-200 my-2"></div>
+                                        <div className="font-semibold text-base text-blue-900 flex items-center gap-2">
+                                          Net monthly spend = <span className="font-mono">(₹{acc.toLocaleString()} + ₹{trans.toLocaleString()} + ₹{living.toLocaleString()}) - ₹{partTime.toLocaleString()} = <span className='text-green-700'>₹{net.toLocaleString()}</span></span>
+                                        </div>
+                                      </div>
+                                    );
+                                  })()}
                                 </div>
-                              </div>
+                              </Card>
                               <div className="flex flex-col gap-2 w-full">
                                 <button
                                   className="flex items-center gap-1 text-xs font-semibold text-gray-700 mb-1 hover:text-blue-700 transition"
