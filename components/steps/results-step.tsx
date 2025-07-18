@@ -218,6 +218,63 @@ function getCollegeRecruiters(college: College) {
   return collegeMap["default"] || ["TCS", "Infosys", "Capgemini", "Wipro", "Cognizant"];
 }
 
+// Helper to calculate a unique fit score for each college
+function calculateFitScore({ college, allColleges, userBudget, priorities }: {
+  college: College,
+  allColleges: College[],
+  userBudget: string,
+  priorities: string[],
+}): number {
+  // Normalize values for all colleges
+  const rankings = allColleges.map((c: College) => Number(c.rankingData?.rank_value) || 1000);
+  const tuitions = allColleges.map((c: College) => parseFloat((c.tuitionFee || "0").replace(/[^\d.]/g, "")) || 0);
+  const rois = allColleges.map((c: College) => typeof c.roi === 'number' ? c.roi : (parseFloat(c.roi) || 5));
+  const budgets = allColleges.map((c: College) => parseFloat((userBudget || "0").replace(/[^\d.]/g, "")) || 0);
+
+  // Normalize functions
+  const norm = (val: number, arr: number[], invert = false) => {
+    const min = Math.min(...arr);
+    const max = Math.max(...arr);
+    if (max === min) return 1;
+    let score = (val - min) / (max - min);
+    if (invert) score = 1 - score;
+    return score;
+  };
+
+  // Extract values for this college
+  const ranking = Number(college.rankingData?.rank_value) || 1000;
+  const tuition = parseFloat((college.tuitionFee || "0").replace(/[^\d.]/g, "")) || 0;
+  const roi = typeof college.roi === 'number' ? college.roi : (parseFloat(college.roi) || 5);
+  const budget = parseFloat((userBudget || "0").replace(/[^\d.]/g, "")) || 0;
+
+  // Priority weights
+  const priorityWeights = {
+    ranking: priorities.includes("ranking") ? 2 : 1,
+    budget: priorities.includes("budget") ? 2 : 1,
+    roi: priorities.includes("roi") ? 2 : 1,
+    tuition_fee: priorities.includes("tuition_fee") ? 2 : 1,
+  };
+  const totalWeight = priorityWeights.ranking + priorityWeights.budget + priorityWeights.roi + priorityWeights.tuition_fee;
+
+  // Individual scores (normalized, 0-1)
+  const rankingScore = norm(ranking, rankings, true) * priorityWeights.ranking;
+  const budgetScore = norm(budget, tuitions, true) * priorityWeights.budget;
+  const roiScore = norm(roi, rois, true) * priorityWeights.roi;
+  const tuitionScore = norm(tuition, tuitions, true) * priorityWeights.tuition_fee;
+
+  // Final fit score (weighted average, 0-1)
+  let fitScore = (rankingScore + budgetScore + roiScore + tuitionScore) / totalWeight;
+
+  // Add a small unique offset based on college id/name for uniqueness
+  let hash = 0;
+  for (let i = 0; i < college.name.length; i++) hash += college.name.charCodeAt(i);
+  fitScore += (hash % 13) * 0.001;
+
+  // Clamp and convert to percentage
+  fitScore = Math.max(0, Math.min(1, fitScore));
+  return Math.round(fitScore * 100);
+}
+
 export default function ResultsStep({
   pageVariants,
   pageTransition,
@@ -256,6 +313,9 @@ export default function ResultsStep({
   const [noteRephraseError, setNoteRephraseError] = useState<{ [collegeId: string]: string }>({});
   // Add state for notes collapse
   const [notesOpen, setNotesOpen] = useState<{ [collegeId: string]: boolean }>({});
+  // 1. Add state for fit scores and loading
+  const [fitScores, setFitScores] = useState<{ [collegeId: string]: number }>({});
+  const [fitScoreLoading, setFitScoreLoading] = useState<{ [collegeId: string]: boolean }>({});
 
   // Update orderedColleges when colleges prop changes
   useEffect(() => {
@@ -571,6 +631,46 @@ export default function ResultsStep({
     }
     if (colleges.length > 0) fetchAllSources();
   }, [colleges]);
+
+  // 2. Fetch fit score for each college on mount or when colleges/userProfile change
+  useEffect(() => {
+    async function fetchAllFitScores() {
+      for (const college of colleges) {
+        if (!fitScores[college.id] && !fitScoreLoading[college.id]) {
+          setFitScoreLoading(prev => ({ ...prev, [college.id]: true }));
+          try {
+            const res = await fetch("/api/get-fit-score", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                college: college.name,
+                country: college.country,
+                city: college.city,
+                tuitionFee: college.tuitionFee,
+                livingCosts: college.livingCosts,
+                avgSalary: college.avgPackage,
+                ranking: college.rankingData?.rank_value,
+                employmentRate: "", // College type does not have employabilityRate
+                priorities: (userProfile as any)?.priority || [],
+                budget: (userProfile as any)?.budget || "",
+                phone: userProfile?.phone || "",
+              }),
+            });
+            const data = await res.json();
+            let score = data.fitScore || 0;
+            if (score > 95) score = 95;
+            setFitScores(prev => ({ ...prev, [college.id]: score }));
+          } catch (err) {
+            setFitScores(prev => ({ ...prev, [college.id]: 0 }));
+          } finally {
+            setFitScoreLoading(prev => ({ ...prev, [college.id]: false }));
+          }
+        }
+      }
+    }
+    if (colleges.length > 0) fetchAllFitScores();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [colleges, userProfile]);
 
   // Cache for college USPs to keep them constant
   const collegeUSPsCache = useRef<{ [collegeId: string]: string[] }>({})
@@ -951,6 +1051,10 @@ export default function ResultsStep({
                                 <div className="flex-1 min-w-0">
                                   <div className="flex flex-wrap items-center gap-2 mb-0.5">
                                     <h3 className="text-lg font-bold text-gray-900 leading-tight mb-0.5 truncate">{college.name}</h3>
+                                    {/* Rank badge */}
+                                    <span className="ml-2 px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 text-xs font-semibold border border-yellow-300 align-middle">
+                                      {index + 1}{index === 0 ? 'st' : index === 1 ? 'nd' : index === 2 ? 'rd' : 'th'} College
+                                    </span>
                                     {college.courseName && (
                                       <div className="text-sm text-gray-500 font-medium mb-0.5 truncate">{college.courseName}</div>
                                     )}
@@ -1025,6 +1129,48 @@ export default function ResultsStep({
                                       >
                                         Compare
                                       </Button>
+                                      <span className="flex items-center gap-1 px-3 py-1 rounded-full bg-blue-50 text-blue-800 font-bold text-base border border-blue-200 shadow-sm">
+                                        <span className="font-semibold mr-1">College Fit Score:</span>
+                                        {fitScoreLoading[college.id]
+                                          ? <span className="text-xs text-gray-400">Loading...</span>
+                                          : (fitScores[college.id] !== undefined ? `${fitScores[college.id]}%` : "N/A")}
+                                      </span>
+                                      <TooltipProvider>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <button
+                                              type="button"
+                                              className="ml-1 w-7 h-7 flex items-center justify-center rounded-full bg-blue-100 border border-blue-300 text-blue-700 hover:bg-blue-200 hover:text-blue-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                                            >
+                                              <Info className="w-4 h-4" />
+                                            </button>
+                                          </TooltipTrigger>
+                                          <TooltipContent className="max-w-xs text-xs text-gray-800 z-50" side="bottom" align="center">
+                                            <div className="font-bold mb-1">College Fit Score</div>
+                                            <div className="mb-1">This score is calculated based on:
+                                              <ul className="list-disc ml-4">
+                                                <li>Ranking</li>
+                                                <li>Budget</li>
+                                                <li>Break-even (ROI)</li>
+                                                <li>Tuition Fee</li>
+                                                <li><span className="font-semibold text-blue-700">Your selected priorities (weighted most)</span></li>
+                                              </ul>
+                                            </div>
+                                            <div className="mb-1">Key Metrics for this college:
+                                              <ul className="list-disc ml-4">
+                                                <li>Ranking: {college.rankingData?.rank_value || 'N/A'}</li>
+                                                <li>Tuition Fee: {college.tuitionFee || 'N/A'}</li>
+                                                <li>Break-even: {(() => {
+                                                  let roi = roiData[college.id];
+                                                  if (typeof roi !== 'number' || isNaN(roi) || roi > 6) roi = 6;
+                                                  return roi ? `${roi} years` : 'N/A';
+                                                })()}</li>
+                                              </ul>
+                                            </div>
+                                            <div className="text-gray-500">Your priorities are weighted more heavily in this score.</div>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </TooltipProvider>
                                     </div>
                                   </div>
                                   {/* USPs Section */}

@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import type { Step, UserProfile, College } from "@/types/college"
 import Papa from "papaparse"
-import { useRef } from "react"
+import { useRef, useState, useEffect } from "react"
 
 interface InitialFormStepProps {
   pageVariants: any
@@ -680,14 +680,37 @@ export default function InitialFormStep({
 
         // Fallback: For any college with missing city or state, call OpenAI API
         const fillMissingCityState = async (college: College) => {
-          if (college.city && college.state) return college;
+          const defaultRankingData = { rank_value: "N/A", rank_provider_name: "N/A", ranking_type_name: "N/A" };
+          if (college.city && college.state) {
+            return {
+              ...college,
+              livingCosts: college.livingCosts || {
+                accommodation: "₹47K-68K/month",
+                transportation: "₹10K-16K/month",
+                living_expense: "₹12.6L/year",
+              },
+              rankingData: college.rankingData || defaultRankingData,
+              state: college.state || "",
+              city: college.city || "",
+            };
+          }
           try {
             const res = await fetch("/api/openai-citystate", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ college: college.name, country: college.country }),
             });
-            if (!res.ok) return college;
+            if (!res.ok) return {
+              ...college,
+              livingCosts: college.livingCosts || {
+                accommodation: "₹47K-68K/month",
+                transportation: "₹10K-16K/month",
+                living_expense: "₹12.6L/year",
+              },
+              rankingData: college.rankingData || defaultRankingData,
+              state: college.state || "",
+              city: college.city || "",
+            };
             const data = await res.json();
             return {
               ...college,
@@ -698,9 +721,20 @@ export default function InitialFormStep({
                 transportation: "₹10K-16K/month",
                 living_expense: "₹12.6L/year",
               },
+              rankingData: college.rankingData || defaultRankingData,
             };
           } catch {
-            return college;
+            return {
+              ...college,
+              livingCosts: college.livingCosts || {
+                accommodation: "₹47K-68K/month",
+                transportation: "₹10K-16K/month",
+                living_expense: "₹12.6L/year",
+              },
+              rankingData: college.rankingData || defaultRankingData,
+              state: college.state || "",
+              city: college.city || "",
+            };
           }
         };
         generatedColleges = await Promise.all(generatedColleges.map(fillMissingCityState));
@@ -712,6 +746,7 @@ export default function InitialFormStep({
             transportation: "₹10K-16K/month",
             living_expense: "₹12.6L/year",
           },
+          rankingData: (college as any).rankingData || { rank_value: "N/A", rank_provider_name: "N/A", ranking_type_name: "N/A" },
           city: (college as any).city || "",
           state: (college as any).state || "",
         })).filter(college => !!college.livingCosts);
@@ -745,6 +780,34 @@ export default function InitialFormStep({
       setIsLoading(false)
     }
   }
+
+  // Priority options for multi-select
+  const PRIORITY_OPTIONS = [
+    { value: "ranking", label: "Ranking" },
+    { value: "budget", label: "Budget" },
+    { value: "roi", label: "ROI" },
+    { value: "tuition_fee", label: "Tuition Fee" },
+    { value: "living_cost", label: "Living Cost" },
+    { value: "scholarships", label: "Scholarships" },
+    { value: "location", label: "Location" },
+    { value: "employability", label: "Employability Rate" },
+    { value: "part_time", label: "Part-time Work" },
+    { value: "campus_life", label: "Campus Life" },
+  ];
+
+  // Multi-select dropdown state
+  const [priorityOpen, setPriorityOpen] = useState(false);
+  const priorityRef = useRef<HTMLDivElement>(null);
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (priorityRef.current && !priorityRef.current.contains(e.target as Node)) {
+        setPriorityOpen(false);
+      }
+    }
+    if (priorityOpen) document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [priorityOpen]);
 
   return (
     <motion.div
@@ -793,6 +856,49 @@ export default function InitialFormStep({
                 onChange={(e) => setFormData((prev: any) => ({ ...prev, phoneNumber: e.target.value }))}
                 className="w-full h-12 text-base rounded-xl border-2 border-gray-200 focus:border-blue-500 transition-all duration-300 hover:border-gray-300 bg-white/50"
               />
+            </motion.div>
+
+            <motion.div
+              initial={{ x: -20, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              transition={{ delay: 0.4, duration: 0.5 }}
+            >
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Priority Features (Select Multiple)</label>
+              <div className="relative" ref={priorityRef}>
+                <button
+                  type="button"
+                  className="w-full h-12 rounded-xl border-2 border-gray-200 focus:border-blue-500 transition-all duration-300 hover:border-gray-300 bg-white/50 text-base px-3 flex items-center justify-between"
+                  onClick={() => setPriorityOpen((open) => !open)}
+                >
+                  <span className="truncate text-left flex-1">
+                    {(formData.priority && formData.priority.length > 0)
+                      ? PRIORITY_OPTIONS.filter(opt => formData.priority.includes(opt.value)).map(opt => opt.label).join(", ")
+                      : "Select your priorities"}
+                  </span>
+                  <svg className={`w-4 h-4 ml-2 transition-transform ${priorityOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+                </button>
+                {priorityOpen && (
+                  <div className="absolute z-20 mt-2 w-full bg-white border border-gray-200 rounded-xl shadow-xl max-h-60 overflow-y-auto p-2 animate-fade-in">
+                    {PRIORITY_OPTIONS.map(opt => (
+                      <label key={opt.value} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-blue-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.priority?.includes(opt.value) || false}
+                          onChange={e => {
+                            const selected = new Set(formData.priority || []);
+                            if (e.target.checked) selected.add(opt.value);
+                            else selected.delete(opt.value);
+                            setFormData((prev: any) => ({ ...prev, priority: Array.from(selected) }));
+                          }}
+                          className="accent-blue-600 w-4 h-4 rounded"
+                        />
+                        <span className="text-sm">{opt.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="text-xs text-gray-500 mt-1">Choose the features that matter most to you.</div>
             </motion.div>
 
             {isLoading && !fetchError && (
