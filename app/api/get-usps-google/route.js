@@ -19,19 +19,23 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 const USP_PROMPT = `
-You are a study abroad agent who specialises in answering queries about USP of universities.
+You are an expert study abroad counselor. For the college and program below, generate exactly 4 short, crisp, India-relevant bullet points (USPs) for Indian students planning to go abroad.
 
-Answer based on the following aspects:
-1. Campus placement rate based on last year and average package that year (if available).
-2. How many Indian students went there last year — how popular is it?
-3. Proximity to any flagship geographical areas — that can boost job/internship opportunities.
-4. The city where it is located — is that city affordable compared to others in that country?
-5. Proximity to most popular cities — how much travel time etc.
-6. The latest QS World University Ranking (number only, as a separate bullet point, if available).
+Instructions:
+- Each bullet must be a short, direct, actionable phrase (max 12–15 words, no long sentences).
+- The first and second points: the most actionable, program/college-specific, India-relevant selling points (e.g., STEM OPT, Indian alumni, city affordability, industry links, etc.).
+- The third point: always mention no language barrier for Indian students, but use a short, varied phrase (e.g., 'No language barrier – all courses in English').
+- The fourth point: always mention scholarship availability for Indian/international students, with a specific amount/percentage if possible, or a short qualitative statement (e.g., 'Up to ₹10L scholarships for Indian students').
+- Do NOT use generic, verbose, or "GPT"-style language. No long sentences. No repetition of employability rate or average salary in the bullets.
+- Format as a bulleted list in plain text (no HTML, no extra text).
 
-Answer everything **very objectively** and in **bullet points**, within **300 words**.
-
-Keep readability **super easy**. Use proper **HTML tags** for formatting.
+Input:
+College: [COLLEGE_NAME]
+Program: [PROGRAM_NAME]
+Country: [COUNTRY]
+Average Package: [AVG_PACKAGE_FROM_COMPARISON_TABLE]
+Graduate Employability Rate: [GRAD_EMPLOYABILITY_RATE_FROM_COMPARISON_TABLE]
+(Indicate if this is the highest among compared colleges)
 `;
 
 // --- New: Comparison Metrics Endpoint ---
@@ -58,10 +62,13 @@ Return all the information in bullet points, within 300 words. Keep language cle
 // --- New: College Ranking Endpoint ---
 const RANKING_PROMPT = `You are a university data expert. Given the name of a university, return ONLY the latest QS World University Ranking (as a number, e.g., 326). Do not include any extra text, explanation, or formatting. If the ranking is not available, return 'N/A'.`;
 
+const { setCache, getCache } = require('../cache');
+
 export async function GET(req) {
   const { searchParams } = new URL(req.url);
   const college = searchParams.get('college');
-  return await handleUSP(college);
+  const phone = searchParams.get('phone') || "";
+  return await handleUSP(college, phone);
 }
 
 export async function POST(req) {
@@ -71,11 +78,80 @@ export async function POST(req) {
     return await handleRanking(body.college);
   }
   const college = body.college;
-  return await handleUSP(college);
+  const phone = body.phone || "";
+  const program = body.program || "";
+  const avgPackage = body.avgPackage || "N/A";
+  const employabilityRate = body.employabilityRate || "N/A";
+  const isHighestPackage = body.isHighestPackage ? "Yes" : "No";
+  const isHighestEmployability = body.isHighestEmployability ? "Yes" : "No";
+  return await handleUSP(college, phone, program, avgPackage, employabilityRate, isHighestPackage, isHighestEmployability);
 }
 
-async function handleUSP(college) {
+// Add auto-select model logic: try GPT-4o, fallback to GPT-3.5-turbo if needed
+async function callOpenAIWithAutoSelect(prompt, controller) {
+  const apiUrl = 'https://api.openai.com/v1/chat/completions';
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${OPENAI_API_KEY}`,
+  };
+  // Try GPT-4o first
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: [
+          { role: 'system', content: 'You are a helpful assistant.' },
+          { role: 'user', content: prompt },
+        ],
+        max_tokens: 512,
+        temperature: 0.7,
+      }),
+      signal: controller.signal
+    });
+    if (response.ok) {
+      const data = await response.json();
+      return { data, model: 'gpt-4o' };
+    } else {
+      const errorText = await response.text();
+      console.log('GPT-4o failed, error:', errorText);
+      throw new Error('GPT-4o failed');
+    }
+  } catch (err) {
+    console.log('GPT-4o unavailable, falling back to GPT-3.5-turbo:', err.message);
+    // Fallback to GPT-3.5-turbo
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model: 'gpt-3.5-turbo',
+        messages: [
+          { role: 'system', content: 'You are a helpful assistant.' },
+          { role: 'user', content: prompt },
+        ],
+        max_tokens: 512,
+        temperature: 0.7,
+      }),
+      signal: controller.signal
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`OpenAI fallback failed: ${errorText}`);
+    }
+    const data = await response.json();
+    return { data, model: 'gpt-3.5-turbo' };
+  }
+}
+
+async function handleUSP(college, phone = "", program = "", avgPackage = "N/A", employabilityRate = "N/A", isHighestPackage = "No", isHighestEmployability = "No") {
   console.log("handleUSP called with college:", college);
+  // Use phone+college as cache key
+  const cacheKey = `usps:${phone}:${college}`;
+  const cached = getCache(cacheKey);
+  if (cached) {
+    return new Response(JSON.stringify({ usps: cached }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
   
   if (!college || typeof college !== 'string') {
     console.log("Invalid college parameter:", college);
@@ -93,51 +169,28 @@ async function handleUSP(college) {
     }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }
 
-  const prompt = `${USP_PROMPT}\n\nUniversity: ${college}`;
-  const apiUrl = 'https://api.openai.com/v1/chat/completions';
-
+  // Interpolate the prompt with actual values
+  const prompt = USP_PROMPT
+    .replace('[COLLEGE_NAME]', college)
+    .replace('[PROGRAM_NAME]', program)
+    .replace('[COUNTRY]', '') // You can add country if available
+    .replace('[AVG_PACKAGE_FROM_COMPARISON_TABLE]', avgPackage)
+    .replace('[GRAD_EMPLOYABILITY_RATE_FROM_COMPARISON_TABLE]', employabilityRate)
+    .replace('(Indicate if this is the highest among compared colleges)',
+      `Highest Avg Package: ${isHighestPackage}. Highest Employability Rate: ${isHighestEmployability}.`);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30000); // 30 seconds timeout
-
   try {
-    console.log("Making OpenAI API call with prompt:", prompt.substring(0, 100) + "...");
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        messages: [
-          { role: 'system', content: 'You are a helpful assistant.' },
-          { role: 'user', content: prompt },
-        ],
-        max_tokens: 512,
-        temperature: 0.7,
-      }),
-      signal: controller.signal
-    });
-
+    console.log("Making OpenAI API call with auto-select model...");
+    const { data, model } = await callOpenAIWithAutoSelect(prompt, controller);
     clearTimeout(timeout);
-    console.log("OpenAI API response status:", response.status);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.log("OpenAI API error:", errorText);
-      return new Response(JSON.stringify({
-        error: `OpenAI API request failed with status ${response.status}`,
-        details: errorText
-      }), { status: response.status, headers: { 'Content-Type': 'application/json' } });
-    }
-
-    const data = await response.json();
-    console.log("OpenAI API response data:", data);
+    console.log("OpenAI API response model used:", model);
     const resultText = data?.choices?.[0]?.message?.content;
-
     if (resultText) {
+      setCache(cacheKey, resultText, 60 * 60 * 1000);
       return new Response(JSON.stringify({
-        usps: resultText
+        usps: resultText,
+        modelUsed: model
       }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     } else {
       return new Response(JSON.stringify({

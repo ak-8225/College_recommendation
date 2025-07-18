@@ -13,9 +13,10 @@ import {
   Info,
   Eye,
   CheckSquare,
+  StickyNote,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -24,6 +25,7 @@ import { useState, useRef, useEffect } from "react"
 import type { Step, College } from "@/types/college"
 import Papa from 'papaparse'
 import type { ParseResult } from 'papaparse'
+import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 
 interface ResultsStepProps {
   pageVariants: any
@@ -133,6 +135,89 @@ function isTuitionFeeInvalid(fee: any) {
   return isNaN(num) || num < 50000;
 }
 
+// Add a modern SVG tick icon at the top of the file
+const TickIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" className="inline-block mr-2 text-green-600">
+    <circle cx="10" cy="10" r="10" fill="#E6F4EA"/>
+    <path d="M6 10.5L9 13.5L14 7.5" stroke="#22C55E" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+);
+
+// Utility function to fetch avg package and source for a college (copied from summary-step)
+async function fetchAvgPackageWithSource(college: College): Promise<{ value: string }> {
+  // 1. Curated mapping (example for demo, expand as needed)
+  const curated: { [name: string]: { value: string } } = {
+    "Bangor University": { value: "£25,000" },
+    // Add more universities here...
+  };
+  if (curated[college.name]) return curated[college.name];
+  // 2. Government/Education portals (stub, implement fetch/scrape as needed)
+  // ...
+  // 3. Third-party sites (stub, implement fetch/scrape as needed)
+  // ...
+  // 4. Fallback to API/internal data
+  return { value: college.avgPackage || "N/A" };
+}
+
+// Utility function to fetch employability rate and source for a college (copied from summary-step)
+async function fetchEmployabilityRateWithSource(college: College, program: string): Promise<{ value: string }> {
+  // 1. Curated mapping (example for demo, expand as needed)
+  const curated: { [name: string]: { value: string } } = {
+    "Bangor University": { value: "92%" },
+    // Add more universities here...
+  };
+  if (curated[college.name]) return curated[college.name];
+  // 2. Government/Education portals (stub, implement fetch/scrape as needed)
+  // ...
+  // 3. Third-party sites (stub, implement fetch/scrape as needed)
+  // ...
+  // 4. Fallback to API/internal data
+  return { value: (college as any).employabilityRate || "N/A" };
+}
+
+// Update the recruiters mapping to be by college and program
+const collegeProgramRecruiters: Record<string, Record<string, string[]>> = {
+  "University of Salford": {
+    "Data Science": ["Amazon", "IBM", "Deloitte", "Capgemini", "TCS"],
+    "Robotics": ["Siemens", "ABB", "Bosch", "Amazon Robotics", "GE"],
+    "AI": ["Google", "Microsoft", "IBM", "Accenture", "Infosys"],
+    "default": ["Amazon", "Deloitte", "PwC", "IBM", "Siemens"]
+  },
+  "Coventry University": {
+    "Cyber Security": ["KPMG", "EY", "PwC", "Accenture", "HSBC"],
+    "Engineering": ["Jaguar Land Rover", "Rolls-Royce", "Siemens", "Bosch", "Tata"],
+    "Finance": ["HSBC", "Barclays", "Deloitte", "KPMG", "PwC"],
+    "default": ["Jaguar Land Rover", "HSBC", "KPMG", "Accenture", "Rolls-Royce"]
+  },
+  "University of Dundee": {
+    "Medicine": ["NHS", "Pfizer", "GSK", "Novartis", "AstraZeneca"],
+    "Law": ["Linklaters", "Clifford Chance", "Allen & Overy", "Freshfields", "EY"],
+    "Business": ["EY", "Barclays", "Tesco", "BBC", "PwC"],
+    "default": ["NHS", "EY", "Barclays", "Tesco", "BBC"]
+  }
+  // Add more colleges and programs as needed
+};
+
+function getCollegeRecruiters(college: College) {
+  const collegeMap = collegeProgramRecruiters[college.name];
+  if (!collegeMap) return ["TCS", "Infosys", "Capgemini", "Wipro", "Cognizant"];
+  const program = (college.courseName || "").trim().toLowerCase();
+  // Try exact match first
+  for (const key in collegeMap) {
+    if (key !== "default" && program === key.trim().toLowerCase()) {
+      return collegeMap[key];
+    }
+  }
+  // Try partial match
+  for (const key in collegeMap) {
+    if (key !== "default" && program.includes(key.trim().toLowerCase())) {
+      return collegeMap[key];
+    }
+  }
+  // Fallback to default recruiters for the college
+  return collegeMap["default"] || ["TCS", "Infosys", "Capgemini", "Wipro", "Cognizant"];
+}
+
 export default function ResultsStep({
   pageVariants,
   pageTransition,
@@ -157,6 +242,87 @@ export default function ResultsStep({
   const [fallbackTuitionFees, setFallbackTuitionFees] = useState<{ [collegeId: string]: string }>({});
   const [userName, setUserName] = useState<string>("")
   const [userNameLoaded, setUserNameLoaded] = useState(false)
+  // Add state for avg package and employability rate sources
+  const [avgPackageSources, setAvgPackageSources] = useState<{ [collegeId: string]: { value: string } }>({});
+  const [employabilityRateSources, setEmployabilityRateSources] = useState<{ [collegeId: string]: { value: string } }>({});
+  // Add state for orderedColleges
+  const [orderedColleges, setOrderedColleges] = useState<College[]>(colleges);
+  // Add state for notes and saved notes per college
+  const [notes, setNotes] = useState<{ [collegeId: string]: string }>({});
+  const [savedNotes, setSavedNotes] = useState<{ [collegeId: string]: string[] }>({});
+  // Add state for note rephrasing loading
+  const [noteRephrasing, setNoteRephrasing] = useState<{ [collegeId: string]: boolean }>({});
+  // Add state for note rephrasing error
+  const [noteRephraseError, setNoteRephraseError] = useState<{ [collegeId: string]: string }>({});
+  // Add state for notes collapse
+  const [notesOpen, setNotesOpen] = useState<{ [collegeId: string]: boolean }>({});
+
+  // Update orderedColleges when colleges prop changes
+  useEffect(() => {
+    setOrderedColleges(colleges);
+  }, [colleges]);
+
+  // Drag-and-drop handler
+  const onDragEnd = (result: DropResult) => {
+    if (!result.destination) return;
+    const reordered = Array.from(orderedColleges);
+    const [removed] = reordered.splice(result.source.index, 1);
+    reordered.splice(result.destination.index, 0, removed);
+    setOrderedColleges(reordered);
+  };
+
+  // Fetch saved college order and notes on mount
+  useEffect(() => {
+    const phone = userProfile?.phone;
+    if (!phone) return;
+    fetch(`/api/user-college-data?phone=${encodeURIComponent(phone)}`)
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data.collegeOrder) && data.collegeOrder.length > 0) {
+          // Reorder colleges based on saved order
+          const idToCollege = Object.fromEntries(colleges.map(c => [c.id, c]));
+          const ordered = data.collegeOrder.map((id: string) => idToCollege[id]).filter(Boolean);
+          // Add any new colleges not in saved order
+          const missing = colleges.filter(c => !data.collegeOrder.includes(c.id));
+          setOrderedColleges([...ordered, ...missing]);
+        }
+        if (data.notes && typeof data.notes === 'object') {
+          // Convert notes to savedNotes format (array of notes per college)
+          const notesObj: { [collegeId: string]: string[] } = {};
+          Object.entries(data.notes).forEach(([collegeId, note]) => {
+            notesObj[collegeId] = Array.isArray(note) ? note : [note];
+          });
+          setSavedNotes(notesObj);
+        }
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userProfile?.phone, colleges.length]);
+
+  // Helper to persist order and notes
+  const persistUserCollegeData = (order: College[], notesObj: { [collegeId: string]: string[] }) => {
+    const phone = userProfile?.phone;
+    if (!phone) return;
+    fetch('/api/user-college-data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        phone,
+        collegeOrder: order.map(c => c.id),
+        notes: Object.fromEntries(Object.entries(notesObj).map(([k, v]) => [k, v]))
+      })
+    });
+  };
+
+  // Save/Reset order handlers
+  const handleSaveOrder = () => {
+    setOrderedColleges([...orderedColleges]);
+    persistUserCollegeData(orderedColleges, savedNotes);
+  };
+  const handleResetOrder = () => {
+    setOrderedColleges(colleges);
+    persistUserCollegeData(colleges, savedNotes);
+  };
 
   // Debug: Log when userName changes
   useEffect(() => {
@@ -391,6 +557,21 @@ export default function ResultsStep({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [colleges, userNameLoaded, userProfile?.phone])
 
+  // Fetch avg package and employability rate for all colleges on mount or when colleges change
+  useEffect(() => {
+    async function fetchAllSources() {
+      const avgResults: { [collegeId: string]: { value: string } } = {};
+      const empResults: { [collegeId: string]: { value: string } } = {};
+      for (const college of colleges) {
+        avgResults[college.id] = await fetchAvgPackageWithSource(college);
+        empResults[college.id] = await fetchEmployabilityRateWithSource(college, college.courseName || "");
+      }
+      setAvgPackageSources(avgResults);
+      setEmployabilityRateSources(empResults);
+    }
+    if (colleges.length > 0) fetchAllSources();
+  }, [colleges]);
+
   // Cache for college USPs to keep them constant
   const collegeUSPsCache = useRef<{ [collegeId: string]: string[] }>({})
 
@@ -454,6 +635,7 @@ export default function ResultsStep({
           tuitionFees: "Source: University of Salford Website 2024",
           employmentRate: "Source: HESA Graduate Outcomes Survey 2023",
         },
+        recruiters: ["Amazon", "Deloitte", "PwC", "IBM", "Siemens"],
       },
       "2": {
         qsRanking:
@@ -483,6 +665,7 @@ export default function ResultsStep({
           tuitionFees: "Source: Coventry University Website 2024",
           employmentRate: "Source: HESA Graduate Outcomes Survey 2023",
         },
+        recruiters: ["Jaguar Land Rover", "HSBC", "KPMG", "Accenture", "Rolls-Royce"],
       },
       "3": {
         qsRanking:
@@ -510,6 +693,7 @@ export default function ResultsStep({
           tuitionFees: "Source: University of Dundee Website 2024",
           employmentRate: "Source: HESA Graduate Outcomes Survey 2023",
         },
+        recruiters: ["NHS", "EY", "Barclays", "Tesco", "BBC"],
       },
     }
 
@@ -541,6 +725,7 @@ export default function ResultsStep({
           tuitionFees: "Source: University Website 2024",
           employmentRate: "Source: Graduate Outcomes Survey 2023",
         },
+        recruiters: ["TCS", "Infosys", "Capgemini", "Wipro", "Cognizant"],
       }
     }
 
@@ -620,6 +805,48 @@ export default function ResultsStep({
 
   const selectedDetails = selectedCollegeForDetails ? getCollegeDetails(selectedCollegeForDetails) : null
 
+  // Handler for notes input
+  const handleNoteChange = (collegeId: string, value: string) => {
+    setNotes((prev) => ({ ...prev, [collegeId]: value }));
+  };
+  // Handler for saving note (with rephrasing)
+  const handleSaveNote = async (collegeId: string) => {
+    if (!notes[collegeId]?.trim()) return;
+    setNoteRephrasing(prev => ({ ...prev, [collegeId]: true }));
+    setNoteRephraseError(prev => ({ ...prev, [collegeId]: '' }));
+    try {
+      const college = orderedColleges.find(c => c.id === collegeId);
+      const res = await fetch('/api/rephrase-usp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          note: notes[collegeId],
+          college: college?.name || '',
+          program: college?.courseName || ''
+        })
+      });
+      const data = await res.json();
+      console.log('Rephrase USP response:', data);
+      if (data.usp && data.usp.trim()) {
+        setSavedNotes(prev => {
+          const updated = {
+            ...prev,
+            [collegeId]: [...(prev[collegeId] || []), data.usp.trim()]
+          };
+          persistUserCollegeData(orderedColleges, updated);
+          return updated;
+        });
+      } else {
+        setNoteRephraseError(prev => ({ ...prev, [collegeId]: data.error || 'Failed to rephrase note. Please try again.' }));
+      }
+    } catch (err) {
+      setNoteRephraseError(prev => ({ ...prev, [collegeId]: 'Network or server error. Please try again.' }));
+    } finally {
+      setNoteRephrasing(prev => ({ ...prev, [collegeId]: false }));
+      setNotes(prev => ({ ...prev, [collegeId]: '' }));
+    }
+  };
+
   return (
     <TooltipProvider>
       <motion.div
@@ -630,40 +857,42 @@ export default function ResultsStep({
         transition={pageTransition}
         className="space-y-6"
       >
-        <div className="flex flex-col sm:flex-row items-center justify-between mb-6 gap-4 sm:gap-0">
-          <Button
-            variant="ghost"
-            onClick={onBack}
-            className="hover:bg-white/50 transition-all duration-300 hover:scale-105"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Analysis
-          </Button>
-          <div className="flex gap-3 items-center">
-            
-            <Button
-              onClick={handleSelectAll}
-              variant="outline"
-              className="bg-white/50 hover:bg-white border-2 hover:scale-105 transition-all duration-300"
-            >
-              <CheckSquare className="w-4 h-4 mr-2" />
-              {selectedForComparison.length === colleges.length ? "Deselect All" : "Select All for Comparison"}
-            </Button>
-            <Button
-              onClick={() => onNext("comparison")}
-              disabled={selectedForComparison.length < 2}
-              variant="outline"
-              className="bg-white/50 hover:bg-white border-2 hover:scale-105 transition-all duration-300"
-            >
-              Compare Selected ({selectedForComparison.length})
-            </Button>
-            <Button
-              onClick={() => onNext("summary")}
-              disabled={colleges.filter((c) => c.liked).length === 0}
-              className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 hover:scale-105 transition-all duration-300"
-            >
-              View Summary ({colleges.filter((c) => c.liked).length} Liked)
-            </Button>
+        {/* Top bar with logout at top right */}
+        <div className="flex justify-between items-start mb-6">
+          <div>
+            {/* Comparison controls */}
+            <div className="flex flex-row gap-2 mb-2">
+              <Button
+                onClick={handleSelectAll}
+                variant="outline"
+                className="bg-white/50 hover:bg-white border-2 hover:scale-105 transition-all duration-300"
+              >
+                <CheckSquare className="w-4 h-4 mr-2" />
+                {selectedForComparison.length === colleges.length ? "Deselect All" : "Select All for Comparison"}
+              </Button>
+              <Button
+                onClick={() => onNext("comparison")}
+                disabled={selectedForComparison.length < 2}
+                variant="outline"
+                className="bg-white/50 hover:bg-white border-2 hover:scale-105 transition-all duration-300"
+              >
+                Compare Selected ({selectedForComparison.length})
+              </Button>
+              <Button
+                onClick={() => onNext("summary")}
+                disabled={colleges.filter((c) => c.liked).length === 0}
+                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 hover:scale-105 transition-all duration-300"
+              >
+                View Summary ({colleges.filter((c) => c.liked).length} Liked)
+              </Button>
+            </div>
+            {/* Save/Reset Order below comparison controls */}
+            <div className="flex flex-row gap-2 mt-2">
+              <Button onClick={handleSaveOrder} className="bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-2 rounded-lg transition-all duration-300">Save Order</Button>
+              <Button onClick={handleResetOrder} className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold px-4 py-2 rounded-lg transition-all duration-300">Reset Order</Button>
+            </div>
+          </div>
+          <div>
             <Button
               onClick={() => onNext("initial-form")}
               variant="destructive"
@@ -675,7 +904,7 @@ export default function ResultsStep({
         </div>
 
         <div className="text-center mb-8 px-2 sm:px-0">
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">
+          <h1 className="text-3xl md:text-4xl font-extrabold bg-gradient-to-r from-yellow-400 via-yellow-600 to-yellow-800 bg-clip-text text-transparent drop-shadow-lg tracking-tight mb-2 font-serif">
             College Recommendations for {userName || userProfile?.name || "Student"}
           </h1>
           <p className="text-base text-gray-600 max-w-2xl mx-auto">
@@ -683,218 +912,243 @@ export default function ResultsStep({
           </p>
         </div>
 
-        <div className="grid gap-6">
-          {colleges.map((college, index) => {
-            const isSelected = college.liked
-            const details = getCollegeDetails(college)
-            const isHovered = hoveredCollege === college.id
+        <DragDropContext onDragEnd={onDragEnd}>
+          <Droppable droppableId="college-list">
+            {(provided) => (
+              <div className="grid gap-6" ref={provided.innerRef} {...provided.droppableProps}>
+                {orderedColleges.map((college, index) => {
+                  const isSelected = college.liked
+                  const details = getCollegeDetails(college)
+                  const isHovered = hoveredCollege === college.id
 
-            return (
-              <Card
-                key={college.id}
-                className={`p-3 transition-all duration-300 hover:shadow-xl border-2 ${
-                  isSelected
-                    ? "border-blue-500 bg-blue-50/50 shadow-lg"
-                    : "border-gray-200 bg-white/80 hover:border-gray-300"
-                } backdrop-blur-sm rounded-2xl relative overflow-hidden`}
-              >
-                <div className="flex flex-col lg:flex-row gap-2 sm:gap-3 w-full">
-                  {/* Left Section - College Info */}
-                  <div className="flex-1">
-                    <div className="flex items-start gap-2 mb-1">
-                      <div className="flex items-center gap-1">
+                  return (
+                    <Draggable key={college.id} draggableId={college.id} index={index}>
+                      {(draggableProvided, snapshot) => (
                         <div
-                          className={`w-12 h-12 bg-gradient-to-br ${college.color} rounded-xl flex items-center justify-center text-white font-bold text-base shadow-lg`}
+                          ref={draggableProvided.innerRef}
+                          {...draggableProvided.draggableProps}
+                          {...draggableProvided.dragHandleProps}
+                          className={`p-3 transition-all duration-300 hover:shadow-xl border-2 ${
+                            isSelected
+                              ? "border-blue-500 bg-blue-50/50 shadow-lg"
+                              : "border-gray-200 bg-white/80 hover:border-gray-300"
+                          } backdrop-blur-sm rounded-2xl relative overflow-hidden`}
                         >
-                          {college.name.charAt(0)}
-                        </div>
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-start justify-between mb-0.5">
-                          <div>
-                            <h3 className="text-lg font-bold text-gray-900 leading-tight mb-0.5">{college.name}</h3>
-                            <p className="text-gray-600 flex items-center gap-1 text-xs mb-0.5">
-                              <MapPin className="w-4 h-4" />
-                              {[
-                                college.city,
-                                college.state,
-                                college.country
-                              ]
-                                .filter(
-                                  (part) => part && typeof part === 'string' && part.trim() && part.trim().toLowerCase() !== 'not_available'
-                                )
-                                .join(', ')}
-                            </p>
-                            <div className="mt-2" />
-                          </div>
-                          <div className="flex flex-row gap-2 items-center ml-4">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="hover:bg-blue-50 hover:border-blue-300 transition-all duration-300 bg-transparent"
-                              onClick={() => handleViewDetails(college)}
-                            >
-                              <Eye className="w-4 h-4 mr-1" />
-                              View Details
-                            </Button>
-                            <Button
-                              onClick={() => onCollegeToggle(college.id)}
-                              variant={isSelected ? "default" : "outline"}
-                              size="sm"
-                              className={`transition-all duration-300 ${
-                                isSelected
-                                  ? "bg-red-600 hover:bg-red-700 text-white"
-                                  : "hover:bg-red-50 hover:border-red-300"
-                              }`}
-                            >
-                              <Heart className={`w-4 h-4 mr-1 ${college.liked ? "fill-current" : ""}`} />
-                              {college.liked ? "Liked" : "Like"}
-                            </Button>
-                            <Button
-                              onClick={() => handleComparisonToggle(college.id)}
-                              variant={selectedForComparison.includes(college.id) ? "default" : "outline"}
-                              size="sm"
-                              className={`transition-all duration-300 ${
-                                selectedForComparison.includes(college.id)
-                                  ? "bg-green-600 hover:bg-green-700 text-white border-2 border-green-600"
-                                  : "hover:bg-green-50 hover:border-green-300 border-2 border-gray-300"
-                              }`}
-                              title="Select for comparison"
-                            >
-                              Compare
-                            </Button>
-                          </div>
-                        </div>
-                        {/* Compact badges and USPs */}
-                        <div className="mt-0 flex flex-col gap-0.5">
-                          <div className="flex flex-wrap items-center gap-1 mb-0.5">
-                            <div className="flex items-center gap-1 bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full text-xs font-medium">
-                              <Star className="w-3 h-3 mr-1" />
-                              {college.rankingData && college.rankingData.rank_value !== "N/A"
-                                ? `Rank #${college.rankingData.rank_value} (${college.rankingData.rank_provider_name})`
-                                : "N/A"}
-                            </div>
-                            <div className="flex items-center gap-1 bg-green-100 text-green-800 px-2 py-0.5 rounded-full text-xs font-medium">
-                              {(() => {
-                                let fee = college.tuitionFee;
-                                if (isTuitionFeeInvalid(fee) && fallbackTuitionFees[college.id]) {
-                                  fee = fallbackTuitionFees[college.id];
-                                }
-                                // Always show a value, never blank or obviously wrong
-                                if (!fee || isTuitionFeeInvalid(fee)) fee = "Approx. ₹8,00,000";
-                                return `₹${String(fee).replace(/[^\d.]/g, "")} INR per year`;
-                              })()}
-                            </div>
-                          </div>
-                          <div className="mt-0 mb-0.5">
-                            {uspsLoading[college.id] ? (
-                              <div className="text-gray-400 text-xs italic">Loading USPs...</div>
-                            ) : (
-                              <ul className="list-disc pl-5 text-gray-700 text-xs space-y-0.5">
-                                {(() => {
-                                  // Extract only the 4 required USPs from the HTML/text
-                                  const html = usps[college.id] || "<ul><li>No USP data available.</li></ul>";
-                                  // Match all <li>...</li> points
-                                  const matches = html.match(/<li>(.*?)<\/li>/g) || [];
-                                  // Keywords to look for
-                                  const keywords = [
-                                    /placement rate|placement/i,
-                                    /average package|avg package|average salary|avg salary/i,
-                                    /popularity|indian students|popularity/i,
-                                    /affordability|affordable|cost|expense/i,
-                                  ];
-                                  // For each keyword, find the first matching USP
-                                  const filteredUSPs = keywords.map((regex) =>
-                                    matches.find((li) => regex.test(li))
-                                  ).filter(Boolean);
-                                  // If less than 4, fill with the first available USPs
-                                  while (filteredUSPs.length < 4 && matches.length > 0) {
-                                    const next = matches.find(
-                                      (li) => !filteredUSPs.includes(li)
-                                    );
-                                    if (next) filteredUSPs.push(next);
-                                    else break;
-                                  }
-                                  // Render only up to 4 points, filter out undefined and ensure li is a string and not generic/missing data
-                                  return filteredUSPs.slice(0, 4)
-                                    .filter((li): li is string => typeof li === 'string')
-                                    .filter((li) => {
-                                      const text = li.toLowerCase();
-                                      return !(
-                                        text.includes('not been publicly disclosed') ||
-                                        text.includes('not available') ||
-                                        text.includes('n/a') ||
-                                        text.includes('unknown') ||
-                                        text.includes('no data') ||
-                                        text.includes('no information')
-                                      );
-                                    })
-                                    .map((li, i) => (
-                                      <li key={i} dangerouslySetInnerHTML={{ __html: li.replace(/<\/?li>/g, "") }} />
-                                    ));
-                                })()}
-                              </ul>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Right Section - Key Metrics (REPLACED) */}
-                  <div className="lg:w-80">
-                    <div className="bg-gradient-to-br from-gray-50 to-white p-3 rounded-xl border">
-                      <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                        <TrendingUp className="w-4 h-4 text-blue-600" />
-                        Key Metrics
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <button type="button" className="ml-1 p-0.5 rounded-full hover:bg-gray-100 focus:outline-none">
-                                <Info className="w-3 h-3 text-gray-400 hover:text-gray-600" />
-                              </button>
-                            </TooltipTrigger>
-                            <TooltipContent side="top">
-                              <span className="text-xs">This data is aggregate and shown in INR per month.</span>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </h4>
-                      {costDataLoaded ? (
-                        (() => {
-                          const costInfo = getCostInfo(college)
-                          if (!costInfo) return <div className="text-xs text-gray-500">No data available for this country/city.</div>
-                          return (
-                            <div className="space-y-2">
-                              <div className="flex justify-between text-sm mb-1">
-                                <span className="text-gray-600">Accommodation</span>
-                                <span className="font-medium">₹{costInfo.accommodation} /month</span>
-                              </div>
-                              <div className="flex justify-between text-sm mb-1">
-                                <span className="text-gray-600">Transportation</span>
-                                <span className="font-medium">₹{costInfo.transportation} /month</span>
-                              </div>
-                              <div className="flex justify-between text-sm mb-1">
-                                <span className="text-gray-600">Living Expense</span>
-                                <span className="font-medium">₹{costInfo.living_expense} /month</span>
-                              </div>
-                              <div className="flex justify-between text-sm mb-1">
-                                <span className="text-gray-600">Part-time Work</span>
-                                <span className="font-medium">₹{costInfo.part_time_work} /month</span>
+                          {/* 1. Add ranking badge at the top left of each card */}
+                          {/* Fix the ranking badge at the top left of each card for better visibility */}
+                          {/* Remove the floating badge from the top left of the card */}
+                          <div className="flex flex-col lg:flex-row gap-2 sm:gap-3 w-full">
+                            {/* Left/Main Section */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start gap-2 mb-1">
+                                <div className="flex items-center gap-1">
+                                  <div
+                                    className={`w-12 h-12 bg-gradient-to-br ${college.color} rounded-xl flex items-center justify-center text-white font-bold text-base shadow-lg`}
+                                  >
+                                    {college.name.charAt(0)}
+                                  </div>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex flex-wrap items-center gap-2 mb-0.5">
+                                    <h3 className="text-lg font-bold text-gray-900 leading-tight mb-0.5 truncate">{college.name}</h3>
+                                    {college.courseName && (
+                                      <div className="text-sm text-gray-500 font-medium mb-0.5 truncate">{college.courseName}</div>
+                                    )}
+                                    <p className="text-gray-600 flex items-center gap-1 text-xs mb-0.5">
+                                      <MapPin className="w-4 h-4" />
+                                      {[
+                                        college.city,
+                                        college.state,
+                                        college.country
+                                      ]
+                                        .filter(
+                                          (part) => part && typeof part === 'string' && part.trim() && part.trim().toLowerCase() !== 'not_available'
+                                        )
+                                        .join(', ')}
+                                    </p>
+                                    <div className="flex flex-wrap items-center gap-1 mb-0.5">
+                                      <div className="flex items-center gap-1 bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full text-xs font-medium">
+                                        <Star className="w-3 h-3 mr-1" />
+                                        Rank #{college.ranking}
+                                        {college.rankingData?.rank_provider_name && (
+                                          <span className="ml-1 text-gray-500 text-[10px] font-normal">{college.rankingData.rank_provider_name}</span>
+                                        )}
+                                      </div>
+                                      <div className="flex items-center gap-1 bg-green-100 text-green-800 px-2 py-0.5 rounded-full text-xs font-medium">
+                                        {(() => {
+                                          let fee = college.tuitionFee;
+                                          if (isTuitionFeeInvalid(fee) && fallbackTuitionFees[college.id]) {
+                                            fee = fallbackTuitionFees[college.id];
+                                          }
+                                          if (!fee || isTuitionFeeInvalid(fee)) fee = "8.0";
+                                          const num = parseFloat(String(fee).replace(/[^\d.]/g, ""));
+                                          if (isNaN(num)) return "N/A";
+                                          const lakhs = (num / 100000).toFixed(2);
+                                          return `₹${lakhs}L`;
+                                        })()}
+                                      </div>
+                                    </div>
+                                    {/* Action buttons inline with name and badges */}
+                                    <div className="flex flex-row gap-2 items-center ml-2">
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="hover:bg-blue-50 hover:border-blue-300 transition-all duration-300 bg-transparent"
+                                        onClick={() => handleViewDetails(college)}
+                                      >
+                                        <Eye className="w-4 h-4 mr-1" />
+                                        View Details
+                                      </Button>
+                                      <Button
+                                        onClick={() => onCollegeToggle(college.id)}
+                                        variant={isSelected ? "default" : "outline"}
+                                        size="sm"
+                                        className={`transition-all duration-300 ${
+                                          isSelected
+                                            ? "bg-red-600 hover:bg-red-700 text-white"
+                                            : "hover:bg-red-50 hover:border-red-300"
+                                        }`}
+                                      >
+                                        <Heart className={`w-4 h-4 mr-1 ${college.liked ? "fill-current" : ""}`} />
+                                        {college.liked ? "Liked" : "Like"}
+                                      </Button>
+                                      <Button
+                                        onClick={() => handleComparisonToggle(college.id)}
+                                        variant={selectedForComparison.includes(college.id) ? "default" : "outline"}
+                                        size="sm"
+                                        className={`transition-all duration-300 ${
+                                          selectedForComparison.includes(college.id)
+                                            ? "bg-green-600 hover:bg-green-700 text-white border-2 border-green-600"
+                                            : "hover:bg-green-50 hover:border-green-300 border-2 border-gray-300"
+                                        }`}
+                                        title="Select for comparison"
+                                      >
+                                        Compare
+                                      </Button>
+                                    </div>
+                                  </div>
+                                  {/* USPs Section */}
+                                  <div className="mt-2 flex flex-col gap-0.5">
+                                    <div className="mt-0 mb-0.5">
+                                      {uspsLoading[college.id] ? (
+                                        <div className="text-gray-400 text-xs italic">Loading USPs...</div>
+                                      ) : (
+                                        <div className="flex flex-col gap-3 bg-white/80 rounded-xl p-4 shadow-sm border border-gray-100">
+                                          {(() => {
+                                            const originalUspLines = usps[college.id] || "";
+                                            const uspLines = originalUspLines
+                                              .split(/\n|\r/)
+                                              .map(line => line.trim())
+                                              .filter(line => line.startsWith('-'))
+                                              .map(line => line.replace(/^[-•]\s*/, ''))
+                                              .slice(0, 4);
+                                            if (uspLines.length === 0) {
+                                              return <div className="text-gray-500 text-sm">No USP data available for this college.</div>;
+                                            }
+                                            return uspLines.map((line, i) => (
+                                              <div key={i} className="flex items-start text-base text-gray-900 font-medium">
+                                                <TickIcon />
+                                                <span>{line}</span>
+                                              </div>
+                                            ));
+                                          })()}
+                                          {(savedNotes[college.id] || []).map((note, i) => (
+                                            <div key={i} className="flex items-start text-base text-gray-900 font-medium group">
+                                              <TickIcon />
+                                              <span className="flex-1">{note}</span>
+                                              <button
+                                                className="ml-2 text-xs text-red-500 hover:text-red-700 opacity-70 group-hover:opacity-100 transition"
+                                                title="Remove USP"
+                                                onClick={() => {
+                                                  setSavedNotes(prev => {
+                                                    const updated = {
+                                                      ...prev,
+                                                      [college.id]: prev[college.id].filter((_, idx) => idx !== i)
+                                                    };
+                                                    persistUserCollegeData(orderedColleges, updated);
+                                                    return updated;
+                                                  });
+                                                }}
+                                                aria-label="Remove USP"
+                                                type="button"
+                                              >
+                                                ✖️
+                                              </button>
+                                            </div>
+                                          ))}
+                                          {noteRephrasing[college.id] && (
+                                            <div className="flex items-center gap-2 text-blue-600 text-sm font-medium">
+                                              <svg className="animate-spin h-4 w-4 text-blue-600" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>
+                                              Rephrasing note...
+                                            </div>
+                                          )}
+                                          {noteRephraseError[college.id] && (
+                                            <div className="text-red-600 text-xs font-medium mt-1">{noteRephraseError[college.id]}</div>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
                               </div>
                             </div>
-                          )
-                        })()
-                      ) : (
-                        <div className="text-xs text-gray-400">Loading cost data...</div>
+                            {/* Right Section: Key Metrics and Notes */}
+                            <div className="flex flex-col items-start min-w-[220px] max-w-[260px] ml-6">
+                              <div className="bg-gradient-to-br from-gray-50 to-white p-4 rounded-xl border w-full mb-3">
+                                <div className="text-xs text-blue-700 font-semibold mb-1">Key Metrics</div>
+                                <div className="text-xs text-gray-700">
+                                  <div>Accommodation: ₹{getCostInfo(college)?.accommodation || 'N/A'} /month</div>
+                                  <div>Transportation: ₹{getCostInfo(college)?.transportation || 'N/A'} /month</div>
+                                  <div>Living: ₹{getCostInfo(college)?.living_expense || 'N/A'} /month</div>
+                                  <div>Part-time: ₹{getCostInfo(college)?.part_time_work || 'N/A'} /month</div>
+                                </div>
+                              </div>
+                              <div className="flex flex-col gap-2 w-full">
+                                <button
+                                  className="flex items-center gap-1 text-xs font-semibold text-gray-700 mb-1 hover:text-blue-700 transition"
+                                  onClick={() => setNotesOpen(prev => ({ ...prev, [college.id]: !prev[college.id] }))}
+                                  aria-expanded={!!notesOpen[college.id]}
+                                  aria-controls={`notes-section-${college.id}`}
+                                  type="button"
+                                >
+                                  <StickyNote className="w-4 h-4" />
+                                  Notes
+                                  <span className="ml-1">{notesOpen[college.id] ? '▲' : '▼'}</span>
+                                </button>
+                                {notesOpen[college.id] && (
+                                  <div id={`notes-section-${college.id}`}> 
+                                    <textarea
+                                      className="w-full min-h-[40px] max-h-[80px] rounded-lg border border-gray-300 px-2 py-1 text-sm resize-vertical focus:outline-none focus:ring-2 focus:ring-blue-200"
+                                      placeholder="Add a note or detail..."
+                                      value={notes[college.id] || ""}
+                                      onChange={e => handleNoteChange(college.id, e.target.value)}
+                                      disabled={noteRephrasing[college.id]}
+                                    />
+                                    <button
+                                      className="self-end mt-1 px-3 py-1 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 transition"
+                                      onClick={() => handleSaveNote(college.id)}
+                                      disabled={!notes[college.id]?.trim() || noteRephrasing[college.id]}
+                                    >
+                                      {noteRephrasing[college.id] ? 'Saving...' : 'Save'}
+                                    </button>
+                                    {noteRephraseError[college.id] && (
+                                      <div className="text-red-600 text-xs font-medium mt-1">{noteRephraseError[college.id]}</div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       )}
-                    </div>
-                  </div>
-                </div>
-              </Card>
-            )
-          })}
-        </div>
+                    </Draggable>
+                  )
+                })}
+                {provided.placeholder}
+              </div>
+            )}
+          </Droppable>
+        </DragDropContext>
 
         {/* Details Dialog */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -946,22 +1200,23 @@ export default function ResultsStep({
                   <p className="text-xs text-gray-500 mt-2">{selectedDetails.sources.tuitionFees}</p>
                 </Card>
 
-                <Card className="p-4">
-                  <h4 className="font-bold text-lg mb-3 flex items-center gap-2">
+                {/* Career Outcomes Section */}
+                <Card className="p-4 mb-4">
+                  <CardHeader className="flex flex-row items-center gap-2 mb-2">
                     <TrendingUp className="w-5 h-5 text-blue-600" />
-                    Career Outcomes
-                  </h4>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span>Employment Rate:</span>
-                      <span className="font-medium text-green-600">{selectedDetails.employmentRate}</span>
+                    <CardTitle className="text-lg font-bold">Career Outcomes</CardTitle>
+                  </CardHeader>
+                  <CardContent className="pl-2">
+                    <div className="flex flex-row justify-between items-center mb-1">
+                      <span className="text-base">Employment Rate:</span>
+                      <span className="text-green-600 font-bold text-lg">{selectedDetails.employmentRate}</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span>Average Salary:</span>
-                      <span className="font-medium">{selectedDetails.averageSalary}</span>
+                    <div className="flex flex-row justify-between items-center mb-1">
+                      <span className="text-base">Average Salary:</span>
+                      <span className="text-black font-bold text-lg">{selectedDetails.averageSalary}</span>
                     </div>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-2">{selectedDetails.sources.employmentRate}</p>
+                    <div className="text-sm text-gray-500 mb-2">Source: Graduate Outcomes Survey 2023</div>
+                  </CardContent>
                 </Card>
 
                 <Card className="p-4">
@@ -1002,38 +1257,8 @@ export default function ResultsStep({
                         ))}
                       </div>
                     </div>
-                    <div>
-                      <span className="text-sm font-medium">Key Facilities:</span>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {selectedDetails.facilities.map((facility, idx) => (
-                          <Badge key={idx} variant="outline" className="text-xs">
-                            {facility}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
                   </div>
                 </Card>
-              </div>
-            )}
-
-            {selectedCollegeForDetails && selectedDetails && (
-              <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-                <h4 className="font-bold text-lg mb-2">Additional Information</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="font-medium">Location:</span> {selectedDetails.location}
-                  </div>
-                  <div>
-                    <span className="font-medium">Transport:</span> {selectedDetails.transport}
-                  </div>
-                  <div>
-                    <span className="font-medium">Accommodation:</span> {selectedDetails.accommodationInfo}
-                  </div>
-                  <div>
-                    <span className="font-medium">Support:</span> {selectedDetails.support}
-                  </div>
-                </div>
               </div>
             )}
           </DialogContent>

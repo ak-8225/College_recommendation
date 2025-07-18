@@ -2,7 +2,6 @@
 
 import { useState } from "react"
 import { AnimatePresence } from "framer-motion"
-import WelcomeStep from "@/components/steps/welcome-step"
 import InitialFormStep from "@/components/steps/initial-form-step"
 import ProfileFormStep from "@/components/steps/profile-form-step"
 import ResultsStep from "@/components/steps/results-step"
@@ -24,6 +23,9 @@ const mockColleges: College[] = [
     admissionsOpen: true,
     liked: false, // was true
     color: "from-blue-500 to-purple-600",
+    courseName: "",
+    campus: "",
+    category: "",
   },
   {
     id: "2",
@@ -38,6 +40,9 @@ const mockColleges: College[] = [
     admissionsOpen: true,
     liked: false, // was true
     color: "from-emerald-500 to-teal-600",
+    courseName: "",
+    campus: "",
+    category: "",
   },
   {
     id: "3",
@@ -52,11 +57,14 @@ const mockColleges: College[] = [
     admissionsOpen: true,
     liked: false,
     color: "from-orange-500 to-red-600",
+    courseName: "",
+    campus: "",
+    category: "",
   },
 ]
 
 export default function CollegeFitApp() {
-  const [currentStep, setCurrentStep] = useState<Step>("welcome")
+  const [currentStep, setCurrentStep] = useState<Step>("initial-form")
   const [formData, setFormData] = useState({
     phoneNumber: "",
     topPriority: "",
@@ -203,14 +211,14 @@ export default function CollegeFitApp() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
       <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-6 max-w-full sm:max-w-6xl w-full">
         <AnimatePresence mode="wait">
-          {currentStep === "welcome" && (
+          {/* {currentStep === "welcome" && (
             <WelcomeStep
               key="welcome"
               pageVariants={pageVariants}
               pageTransition={pageTransition}
               onNext={handleNext}
             />
-          )}
+          )} */}
 
           {currentStep === "initial-form" && (
             <InitialFormStep
@@ -281,6 +289,7 @@ export default function CollegeFitApp() {
               onBack={handleBack}
               tuitionFees={{}}
               rankingData={{}}
+              userPhone={formData.phoneNumber || ""}
               onCollegeToggle={(id) => {
                 setColleges((prevColleges) =>
                   prevColleges.map((college) => (college.id === id ? { ...college, liked: !college.liked } : college)),

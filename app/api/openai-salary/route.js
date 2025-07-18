@@ -1,10 +1,17 @@
 // app/api/openai-salary/route.js
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const { setCache, getCache } = require('../cache');
 
 export async function POST(req) {
   try {
-    const { prompt } = await req.json();
+    const { prompt, phone, college } = await req.json();
+    // Use phone+college as cache key
+    const cacheKey = `salary:${phone || ''}:${college || ''}`;
+    const cached = getCache(cacheKey);
+    if (cached) {
+      return new Response(JSON.stringify({ salary: cached }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
     console.log('DEBUG: Received OpenAI prompt:', prompt);
     if (!prompt || typeof prompt !== 'string') {
       return new Response(JSON.stringify({ error: 'Missing prompt' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
@@ -41,8 +48,8 @@ export async function POST(req) {
     const resultText = data?.choices?.[0]?.message?.content;
     console.log('DEBUG: OpenAI API response:', resultText);
     // Try to extract the salary line (first line or line starting with 'Estimated Starting Salary:')
-    let salary = 'N/A';
     if (resultText) {
+      let salary = 'N/A';
       const match = resultText.match(/Estimated Starting Salary\s*[:：]?\s*(.+)/i);
       if (match && match[1]) {
         salary = match[1].trim();
@@ -51,8 +58,10 @@ export async function POST(req) {
         const firstLine = resultText.split('\n').find(line => line.trim());
         if (firstLine) salary = firstLine.trim();
       }
+      setCache(cacheKey, salary, 60 * 60 * 1000);
+      return new Response(JSON.stringify({ salary }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
-    return new Response(JSON.stringify({ salary }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ salary: 'N/A' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   } catch (err) {
     return new Response(JSON.stringify({ error: 'Internal server error', details: String(err) }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }

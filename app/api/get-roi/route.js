@@ -1,6 +1,7 @@
 // app/api/get-roi/route.js
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const { setCache, getCache } = require('../cache');
 
 const ROI_PROMPT = `You are a financial analyst specializing in study abroad ROI calculations. 
 Given the university name and its financial parameters, calculate the break-even years (time to recover investment).
@@ -42,6 +43,14 @@ export async function POST(req) {
   const avgSalary = body.avgSalary || "";
   const ranking = body.ranking || "";
   const employmentRate = body.employmentRate || "";
+  const phone = body.phone || "";
+
+  // Use phone+college as cache key
+  const cacheKey = `roi:${phone}:${college}`;
+  const cached = getCache(cacheKey);
+  if (cached) {
+    return new Response(JSON.stringify({ roi: cached }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
 
   if (!college || typeof college !== 'string') {
     return new Response(JSON.stringify({
@@ -110,7 +119,8 @@ export async function POST(req) {
       let roi = roiMatch ? parseFloat(roiMatch[1]) : 3.5; // Default fallback
       // Enforce a minimum ROI of 2.0 years
       if (roi < 2.0) roi = 2.0;
-      
+      // Cache the result for 60 minutes
+      setCache(cacheKey, roi, 60 * 60 * 1000);
       return new Response(JSON.stringify({
         roi: roi
       }), { status: 200, headers: { 'Content-Type': 'application/json' } });

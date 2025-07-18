@@ -1,5 +1,7 @@
-import React from "react";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import React, { useEffect, useState } from "react";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import Papa from "papaparse";
+import Image from "next/image";
 
 interface College {
   name: string;
@@ -41,85 +43,130 @@ interface LeapStyleSummaryPDFProps {
   roiData: { name: string; roi: number }[];
   usps: string[];
   relationshipManager?: { name: string; phone: string };
-  employmentData: { rate: number; salary: number }[];
+  employmentData: { university: string; rate: number; salary: number }[];
 }
 
-const LeapStyleSummaryPDF: React.FC<LeapStyleSummaryPDFProps> = ({
-  meetingDate,
-  counselor,
-  student,
-  purpose,
-  shortlistedColleges,
-  fitSummary,
-  challenges,
-  conclusion,
-  timeline,
-  insights,
-  financial,
-  roiData,
-  usps,
-  relationshipManager,
-  employmentData,
-}) => {
-  // Helper function to format tuition fee
+// Sample data for demonstration
+const sampleColleges: College[] = [
+  {
+    name: "Stanford University",
+    flag: "🇺🇸",
+    country: "USA",
+    tuitionFee: "55000",
+    avgPackage: "₹85.0L",
+    roi: "3.2",
+    rankingData: { rank_value: "2", rank_provider_name: "QS World" },
+    usps: ["Top-tier research opportunities", "Silicon Valley connections", "World-class faculty"]
+  },
+  {
+    name: "MIT",
+    flag: "🇺🇸",
+    country: "USA",
+    tuitionFee: "58000",
+    avgPackage: "₹90.0L",
+    roi: "2.8",
+    rankingData: { rank_value: "1", rank_provider_name: "QS World" },
+    usps: ["Leading technology programs", "Innovation hub", "Strong alumni network"]
+  },
+  {
+    name: "University of Cambridge",
+    flag: "🇬🇧",
+    country: "UK",
+    tuitionFee: "35000",
+    avgPackage: "₹65.0L",
+    roi: "4.1",
+    rankingData: { rank_value: "3", rank_provider_name: "QS World" },
+    usps: ["Historic excellence", "Research-focused", "Global recognition"]
+  }
+];
+
+const sampleROIData = [
+  { name: "Stanford", roi: 3.2 },
+  { name: "MIT", roi: 2.8 },
+  { name: "Cambridge", roi: 4.1 }
+];
+
+const sampleEmploymentData = [
+  { university: "Stanford", rate: 95, salary: 120000 },
+  { university: "MIT", rate: 97, salary: 125000 },
+  { university: "Cambridge", rate: 88, salary: 85000 }
+];
+
+const LeapStyleSummaryPDF: React.FC<LeapStyleSummaryPDFProps> = (props) => {
+  // Destructure props for easier use
+  const {
+    meetingDate: initialMeetingDate,
+    counselor: initialCounselor,
+    student: initialStudent,
+    ...restProps
+  } = props;
+
+  // State for dynamic student name and counselor info
+  const [studentName, setStudentName] = useState(initialStudent.name);
+  const [counselor, setCounselor] = useState(initialCounselor);
+
+  // Helper to get the correct phone number for the three counselors
+  function getCounselorPhoneByName(name: string, fallback: string) {
+    if (name === "Prakhar Pragy Dixit") return "8951269334";
+    if (name === "Ayush Mohapatra") return "9008011498";
+    if (name === "Lokesh Karivepakula") return "9008009156";
+    return fallback;
+  }
+
+  useEffect(() => {
+    const phone = (initialStudent as any)?.phone || "";
+    if (!phone) {
+      setCounselor((prev) => ({
+        ...prev,
+        phone: getCounselorPhoneByName(prev.name, prev.phone || ""),
+      }));
+      return;
+    }
+    fetch('https://docs.google.com/spreadsheets/d/e/2PACX-1vRQtjtY6NkC6LSKa_vEVbwjfoMVUnkGpZp0Q1mpmtJEDx-KXgBLGlmTTOin-VB6ycISSIaISUVOcKin/pub?output=csv')
+      .then((res) => res.text())
+      .then((csv) => {
+        Papa.parse(csv, {
+          header: true,
+          skipEmptyLines: true,
+          complete: (results: { data: any[] }) => {
+            const normalize = (str: string) => String(str || '').replace(/\D/g, '').trim();
+            const userPhoneNorm = normalize(phone);
+            let row = results.data.find((r: any) => normalize(r["Pre Login Leap User - Pre User → Phone"]) === userPhoneNorm);
+            if (!row && userPhoneNorm) {
+              const withCountryCode = '91' + userPhoneNorm;
+              row = results.data.find((r: any) => normalize(r["Pre Login Leap User - Pre User → Phone"]) === withCountryCode);
+            }
+            if (!row && userPhoneNorm && userPhoneNorm.startsWith('91')) {
+              const withoutCountryCode = userPhoneNorm.substring(2);
+              row = results.data.find((r: any) => normalize(r["Pre Login Leap User - Pre User → Phone"]) === withoutCountryCode);
+            }
+            if (row) {
+              let counselorName = row["Pre User Counseling - Pre User → Assigned Counsellor"] || initialCounselor.name;
+              let counselorPhone = getCounselorPhoneByName(counselorName, initialCounselor.phone || "");
+              setCounselor({
+                name: counselorName,
+                title: initialCounselor.title,
+                phone: counselorPhone,
+              });
+              setStudentName(row["Pre Login Leap User - Pre User → Name"] || initialStudent.name);
+            } else {
+              setCounselor((prev) => ({
+                ...prev,
+                phone: getCounselorPhoneByName(prev.name, prev.phone || ""),
+              }));
+            }
+          },
+        });
+      });
+  }, [initialStudent, initialCounselor]);
+
+  // Format helpers
   const formatTuitionFee = (fee?: string) => {
     if (!fee) return "N/A";
-    const num =
-      typeof fee === "number" ? fee : parseFloat(fee.replace(/[^.0-9]/g, ""));
-    return num ? `₹${num.toLocaleString("en-IN")} per year` : "N/A";
+    const num = typeof fee === "number" ? fee : parseFloat(fee.replace(/[^.0-9]/g, ""));
+    return num ? `$${num.toLocaleString("en-US")}` : "N/A";
   };
 
-  // Helper function to calculate break-even years
-  const calculateBreakEven = (roi?: string, index = 0) => {
-    const roiValue =
-      roi && !isNaN(parseFloat(roi)) && parseFloat(roi) <= 6
-        ? parseFloat(roi)
-        : 3.2 + index * 0.3;
-
-    if (roiValue > 6) return "N/A";
-
-    if (roiValue < 4) {
-      const min = (roiValue - 0.2).toFixed(1);
-      const max = (roiValue + 0.3).toFixed(1);
-      return `${min} - ${max} Years`;
-    }
-
-    const min = Math.floor(roiValue);
-    const max = Math.ceil(roiValue);
-    return `${min} - ${max} Years`;
-  };
-
-  // Helper function to calculate average break-even
-  const getAverageBreakEven = () => {
-    if (!roiData || !roiData.length) return "N/A";
-
-    const validRois = roiData.filter((r) => !isNaN(r.roi) && r.roi <= 6);
-    if (!validRois.length) return "N/A";
-
-    const min = Math.min(...validRois.map((r) => r.roi));
-    const max = Math.max(...validRois.map((r) => r.roi));
-    return `${min.toFixed(1)} - ${max.toFixed(1)} Years`;
-  };
-
-  // Helper function to calculate employment rate
-  const getEmploymentRate = () => {
-    if (!employmentData || !employmentData.length) return "N/A";
-    const avg =
-      employmentData.reduce((sum, e) => sum + (e.rate || 0), 0) /
-      employmentData.length;
-    return `${avg.toFixed(0)}%`;
-  };
-
-  // Helper function to calculate average salary
-  const getAverageSalary = () => {
-    if (!employmentData || !employmentData.length) return "N/A";
-    const avg =
-      employmentData.reduce((sum, e) => sum + (e.salary || 0), 0) /
-      employmentData.length;
-    return `£${(avg / 1000).toFixed(1)}K`;
-  };
-
-  // Helper function to get average package display
   const getAvgPackage = (college: College) => {
     const val = college.avgSalary || college.avgPackage;
     if (!val || val === "N/A" || val === "NA" || val === "-") {
@@ -128,360 +175,256 @@ const LeapStyleSummaryPDF: React.FC<LeapStyleSummaryPDFProps> = ({
     return val;
   };
 
-  // Prepare chart data
-  const prepareChartData = () => {
-    const chartData = [];
-    const maxLength = Math.max(
-      shortlistedColleges.length,
-      roiData?.length || 0,
-      employmentData?.length || 0
-    );
-
-    for (let i = 0; i < maxLength; i++) {
-      const college = shortlistedColleges[i];
-      const roiItem = roiData?.[i];
-      const employmentItem = employmentData?.[i];
-
-      const dataPoint: any = {
-        name: college?.name || roiItem?.name || `College ${i + 1}`,
-        shortName: college?.name ? college.name.split(' ')[0] : `C${i + 1}`,
-      };
-
-      // ROI (Break-even years)
-      if (college?.roi) {
-        const roiValue = parseFloat(college.roi);
-        dataPoint.roi = !isNaN(roiValue) && roiValue <= 6 ? roiValue : null;
-      } else if (roiItem?.roi !== undefined) {
-        dataPoint.roi = roiItem.roi !== undefined ? roiItem.roi : null;
-      } else {
-        dataPoint.roi = null;
-      }
-
-      // Employment rate
-      if (employmentItem?.rate !== undefined) {
-        dataPoint.employmentRate = employmentItem.rate;
-      } else {
-        dataPoint.employmentRate = null;
-      }
-
-      // Average salary (in thousands)
-      if (employmentItem?.salary !== undefined) {
-        dataPoint.avgSalary = employmentItem.salary / 1000;
-      } else if (college?.avgSalary || college?.avgPackage) {
-        const salaryStr = college?.avgSalary || college?.avgPackage || "26";
-        const salaryNum = parseFloat(salaryStr.replace(/[^.0-9]/g, ""));
-        dataPoint.avgSalary = !isNaN(salaryNum) ? salaryNum : null;
-      } else {
-        dataPoint.avgSalary = null;
-      }
-
-      // Tuition fee (in lakhs)
-      if (college?.tuitionFee) {
-        const tuitionNum = parseFloat(college.tuitionFee.replace(/[^.0-9]/g, ""));
-        dataPoint.tuitionFee = !isNaN(tuitionNum) ? tuitionNum / 100000 : null;
-      } else {
-        dataPoint.tuitionFee = null;
-      }
-
-      chartData.push(dataPoint);
+  const calculateBreakEven = (roi?: string, index = 0) => {
+    const roiValue = roi && !isNaN(parseFloat(roi)) && parseFloat(roi) <= 6
+      ? parseFloat(roi)
+      : 3.2 + index * 0.3;
+    if (roiValue > 6) return "N/A";
+    if (roiValue < 4) {
+      const min = (roiValue - 0.2).toFixed(1);
+      const max = (roiValue + 0.3).toFixed(1);
+      return `${min} - ${max} Years`;
     }
-
-    return chartData;
+    const min = Math.floor(roiValue);
+    const max = Math.ceil(roiValue);
+    return `${min} - ${max} Years`;
   };
 
-  const chartData = prepareChartData();
+  // Metrics
+  const getAverageBreakEven = () => {
+    if (!restProps.roiData || !restProps.roiData.length) return "N/A";
+    const validRois = restProps.roiData.filter((r: any) => !isNaN(r.roi) && r.roi <= 6);
+    if (!validRois.length) return "N/A";
+    const min = Math.min(...validRois.map((r: any) => r.roi));
+    const max = Math.max(...validRois.map((r: any) => r.roi));
+    return `${min.toFixed(1)} - ${max.toFixed(1)} Years`;
+  };
 
-  // Custom tooltip
-  const CustomTooltip = ({ active, payload, label }: any) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="bg-white p-4 border rounded-lg shadow-lg border-gray-200">
-          <p className="font-semibold text-gray-800 mb-2">{label}</p>
-          {payload.map((entry: any, index: number) => (
-            <p key={index} style={{ color: entry.color }} className="text-sm">
-              {entry.name}: {entry.value}
-              {entry.dataKey === 'roi' && ' years'}
-              {entry.dataKey === 'employmentRate' && '%'}
-              {entry.dataKey === 'avgSalary' && 'L'}
-              {entry.dataKey === 'tuitionFee' && 'L'}
-            </p>
-          ))}
-        </div>
-      );
-    }
-    return null;
+  const getEmploymentRate = () => {
+    if (!restProps.employmentData || !restProps.employmentData.length) return "N/A";
+    const avg = restProps.employmentData.reduce((sum: number, e: any) => sum + (e.rate || 0), 0) / restProps.employmentData.length;
+    return `${avg.toFixed(0)}%`;
+  };
+
+  const getAverageSalary = () => {
+    if (!restProps.employmentData || !restProps.employmentData.length) return "N/A";
+    const avg = restProps.employmentData.reduce((sum: number, e: any) => sum + (e.salary || 0), 0) / restProps.employmentData.length;
+    return `$${(avg / 1000).toFixed(1)}K`;
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 font-sans">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 font-sans antialiased">
       {/* Header Section */}
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-b-3xl shadow-lg mb-8">
-        <div className="flex justify-between items-center px-8 py-6">
-          <div className="flex items-center">
-            <div className="bg-white rounded-2xl p-2 shadow-md">
-              <div className="w-24 h-12 rounded-xl overflow-hidden flex items-center justify-center shadow-lg bg-white border">
-                <img
-                  src="/logo.png"
-                  alt="Logo"
-                  className="object-contain w-full h-full"
-                />
+      <div className="bg-gradient-to-r from-blue-700 via-blue-800 to-indigo-900 text-white shadow-2xl relative overflow-hidden">
+        <div className="absolute inset-0 bg-black/10"></div>
+        <div className="absolute top-0 left-0 w-full h-full">
+          <div className="absolute top-10 left-10 w-20 h-20 bg-white/10 rounded-full blur-xl"></div>
+          <div className="absolute top-20 right-20 w-32 h-32 bg-indigo-400/20 rounded-full blur-2xl"></div>
+          <div className="absolute bottom-10 left-1/3 w-24 h-24 bg-blue-400/20 rounded-full blur-xl"></div>
+        </div>
+        <div className="max-w-7xl mx-auto px-8 py-16 relative z-10">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-10">
+            <div className="flex items-center gap-10">
+              <div className="w-28 h-20 bg-white/95 rounded-3xl shadow-2xl p-4 flex items-center justify-center transform hover:scale-105 transition-transform duration-300">
+                <Image src="/logo.png" alt="Leap Logo" width={90} height={40} className="object-contain" />
+              </div>
+              <div>
+                <h1 className="text-6xl font-bold tracking-tight mb-4 bg-gradient-to-r from-white via-blue-100 to-indigo-100 bg-clip-text text-transparent">
+                  Leap Scholar
+                </h1>
+                <p className="text-blue-100 text-2xl font-medium">Study Abroad Counseling Excellence</p>
+                <div className="w-20 h-1 bg-gradient-to-r from-blue-400 to-indigo-400 rounded-full mt-4"></div>
               </div>
             </div>
-            <div className="ml-4">
-              <h1 className="text-2xl font-bold">Leap Scholar</h1>
-              <p className="text-blue-100 text-sm">Study Abroad Counseling</p>
+            <div className="bg-white/15 backdrop-blur-md rounded-3xl p-10 border border-white/30 min-w-[320px] shadow-2xl">
+              <div className="text-2xl font-bold text-white mb-4">{counselor.name}</div>
+              <div className="text-lg text-blue-100 mb-4">{counselor.title || "Senior Counselor"}</div>
+              {counselor.phone && (
+                <div className="text-blue-100 text-lg mb-5 flex items-center gap-3">
+                  <span className="text-xl">📞</span> {counselor.phone}
+                </div>
+              )}
+              <div className="text-lg text-blue-100 flex items-center gap-3">
+                <span className="text-xl">📅</span> {initialMeetingDate}
+              </div>
             </div>
           </div>
-          <div className="text-right">
-            <div className="text-lg font-semibold mb-1">
-              Counselor: {counselor.name}
-            </div>
-            {counselor.phone && (
-              <div className="text-blue-100 text-sm mb-1">
-                Phone: {counselor.phone}
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-8">
+        {/* Student Information */}
+        <div className="py-16">
+          <div className="bg-white rounded-3xl shadow-2xl border border-gray-100 p-16 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-br from-blue-50 to-indigo-100 rounded-full -translate-y-20 translate-x-20 opacity-60"></div>
+            <div className="absolute bottom-0 left-0 w-32 h-32 bg-gradient-to-tr from-purple-50 to-pink-100 rounded-full translate-y-16 -translate-x-16 opacity-60"></div>
+            
+            <div className="flex items-center gap-12 mb-12 relative z-10">
+              <div className="w-32 h-32 bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-600 rounded-full flex items-center justify-center text-white font-bold text-4xl shadow-2xl transform hover:scale-105 transition-transform duration-300">
+                {studentName.charAt(0)}
               </div>
-            )}
-            <div className="text-base">Meeting Date: {meetingDate}</div>
+              <div>
+                <div className="text-sm font-bold text-blue-600 mb-4 tracking-widest uppercase">Student Profile</div>
+                <div className="text-6xl font-bold text-gray-900 mb-4 tracking-tight">{studentName}</div>
+                <div className="text-3xl text-gray-600 font-medium">{initialStudent.courseName}</div>
+              </div>
+            </div>
+            <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 rounded-3xl p-12 border-l-8 border-blue-500 shadow-lg relative z-10">
+              <div className="text-sm font-bold text-blue-700 mb-6 tracking-widest uppercase">Session Purpose</div>
+              <p className="text-gray-700 text-2xl leading-relaxed italic font-medium">"{restProps.purpose}"</p>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Student Information */}
-      <div className="px-8 mb-8">
-        <div className="text-blue-600 font-semibold text-lg mb-2">Student</div>
-        <div className="text-3xl font-bold text-gray-800 mb-2">
-          {student.name}
-        </div>
-        {/* <div className="text-xl text-indigo-600 font-semibold">
-          {student.status}
-        </div> */}
-      </div>
-
-      {/* Purpose Section */}
-      <div className="px-8 mb-8">
-        <div className="bg-blue-50 rounded-xl p-6 border-l-4 border-blue-500">
-          <p className="text-gray-700 italic text-lg leading-relaxed">
-            {purpose}
-          </p>
-        </div>
-      </div>
-
-      {/* Shortlisted Colleges */}
-      <div className="px-8 mb-12">
-        <h2 className="text-2xl font-bold text-blue-600 mb-6 pb-2 border-b-2 border-blue-200">
-          Shortlisted Colleges
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {shortlistedColleges.map((college, index) => (
-            <div
-              key={index}
-              className="bg-white rounded-2xl border-2 border-blue-100 shadow-lg hover:shadow-xl transition-shadow duration-300 overflow-hidden"
-            >
-              {/* College Header */}
-              <div className="p-6 pb-4">
-                <div className="flex items-center gap-4 mb-4">
-                  <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-md">
-                    {college.name.charAt(0)}
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="font-bold text-gray-800 text-lg leading-tight">
-                      {college.name}
-                    </h3>
-                    <p className="text-gray-500 text-sm flex items-center gap-1">
-                      <span>{college.flag}</span>
-                      <span>{college.country}</span>
-                    </p>
-                  </div>
-                  <div className="text-red-500 text-xl">♥</div>
-                </div>
+        {/* Summary Metrics */}
+        <div className="mb-24">
+          <div className="flex items-center gap-6 mb-16">
+            <div className="w-16 h-16 bg-gradient-to-br from-purple-600 to-purple-700 rounded-2xl flex items-center justify-center shadow-xl">
+              <span className="text-white font-bold text-2xl">📊</span>
+            </div>
+            <h2 className="text-5xl font-bold text-gray-900 tracking-tight">Key Metrics</h2>
+            <div className="flex-1 h-1 bg-gradient-to-r from-purple-400 via-purple-300 to-transparent rounded-full"></div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10">
+            <div className="group bg-gradient-to-br from-blue-500 to-blue-600 rounded-3xl p-12 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2">
+              <div className="flex items-center justify-between mb-8">
+                <div className="text-blue-100 font-bold text-lg tracking-wide">AVG BREAK-EVEN</div>
+                <div className="text-5xl group-hover:scale-110 transition-transform duration-300">⏱️</div>
               </div>
+              <div className="text-6xl font-bold mb-2">{getAverageBreakEven()}</div>
+              <div className="w-full h-1 bg-blue-400 rounded-full opacity-50"></div>
+            </div>
+            <div className="group bg-gradient-to-br from-green-500 to-green-600 rounded-3xl p-12 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2">
+              <div className="flex items-center justify-between mb-8">
+                <div className="text-green-100 font-bold text-lg tracking-wide">EMPLOYMENT RATE</div>
+                <div className="text-5xl group-hover:scale-110 transition-transform duration-300">💼</div>
+              </div>
+              <div className="text-6xl font-bold mb-2">{getEmploymentRate()}</div>
+              <div className="w-full h-1 bg-green-400 rounded-full opacity-50"></div>
+            </div>
+            <div className="group bg-gradient-to-br from-purple-500 to-purple-600 rounded-3xl p-12 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2">
+              <div className="flex items-center justify-between mb-8">
+                <div className="text-purple-100 font-bold text-lg tracking-wide">AVG SALARY</div>
+                <div className="text-5xl group-hover:scale-110 transition-transform duration-300">💰</div>
+              </div>
+              <div className="text-6xl font-bold mb-2">{getAverageSalary()}</div>
+              <div className="w-full h-1 bg-purple-400 rounded-full opacity-50"></div>
+            </div>
+            <div className="group bg-gradient-to-br from-orange-500 to-orange-600 rounded-3xl p-12 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2">
+              <div className="flex items-center justify-between mb-8">
+                <div className="text-orange-100 font-bold text-lg tracking-wide">UNIVERSITIES</div>
+                <div className="text-5xl group-hover:scale-110 transition-transform duration-300">🎓</div>
+              </div>
+              <div className="text-6xl font-bold mb-2">{restProps.shortlistedColleges.length}</div>
+              <div className="w-full h-1 bg-orange-400 rounded-full opacity-50"></div>
+            </div>
+          </div>
+        </div>
 
-              {/* College Details */}
-              <div className="px-6 pb-6">
-                <div className="grid grid-cols-2 gap-4 border-t border-gray-100 pt-4">
-                  <div>
-                    <div className="text-xs text-gray-500 mb-1">
-                      Tuition Fee
+        {/* Liked Universities */}
+        <div className="mb-24">
+          <div className="flex items-center gap-6 mb-16">
+            <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl flex items-center justify-center shadow-xl">
+              <span className="text-white font-bold text-3xl">🎓</span>
+            </div>
+            <h2 className="text-5xl font-bold text-gray-900 tracking-tight">Liked Universities</h2>
+            <div className="flex-1 h-1 bg-gradient-to-r from-blue-400 via-blue-300 to-transparent rounded-full"></div>
+            <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-8 py-4 rounded-full text-xl font-bold shadow-lg">
+              {restProps.shortlistedColleges.length} Selected
+            </div>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-12">
+            {restProps.shortlistedColleges.map((college, index) => (
+              <div
+                key={index}
+                className="group bg-white rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-500 border border-gray-100 hover:border-blue-200 overflow-hidden transform hover:-translate-y-3 hover:scale-105"
+              >
+                <div className="p-12 pb-10 bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-blue-200/30 rounded-full -translate-y-10 translate-x-10"></div>
+                  <div className="flex items-start gap-8 relative z-10">
+                    <div className="w-24 h-24 bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-700 rounded-3xl flex items-center justify-center text-white font-bold text-3xl shadow-xl group-hover:scale-110 transition-transform duration-300">
+                      {college.name.charAt(0)}
                     </div>
-                    <div className="font-semibold text-gray-800 text-sm">
-                      {formatTuitionFee(college.tuitionFee)}
+                    <div className="flex-1">
+                      <h3 className="font-bold text-gray-900 text-2xl leading-tight mb-4">{college.name}</h3>
+                      <div className="flex items-center gap-4 text-gray-600 text-xl">
+                        <span className="text-3xl">{college.flag}</span>
+                        <span className="font-semibold">{college.country}</span>
+                      </div>
                     </div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-gray-500 mb-1">
-                      Avg Package
-                    </div>
-                    <div className="font-semibold text-gray-800 text-sm">
-                      {getAvgPackage(college)}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-gray-500 mb-1">Break-even</div>
-                    <div className="font-semibold text-green-600 text-sm">
-                      {calculateBreakEven(college.roi, index)}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-gray-500 mb-1">Ranking</div>
-                    <div className="font-semibold text-gray-800 text-sm">
-                      {college.rankingData && college.rankingData.rank_value !== "N/A"
-                        ? `Rank #${college.rankingData.rank_value} (${college.rankingData.rank_provider_name})`
-                        : "N/A"}
-                    </div>
+                    <div className="text-red-500 text-4xl group-hover:scale-125 transition-transform duration-300">♥</div>
                   </div>
                 </div>
-
-                {/* USPs */}
-                {college.usps && college.usps.length > 0 && (
-                  <div className="mt-4 pt-4 border-t border-gray-100">
-                    <div className="text-xs text-gray-500 mb-2">
-                      Key Highlights
-                    </div>
-                    <ul className="space-y-1">
-                      {college.usps.slice(0, 2).map((usp, idx) => (
-                        <li
-                          key={idx}
-                          className="text-xs text-gray-600 flex items-start gap-1"
-                        >
-                          <span className="text-blue-500 mt-1">•</span>
-                          <span>{usp}</span>
-                        </li>
+                <div className="p-12">
+                  <div className="mb-6">
+                    <div className="text-sm font-bold text-gray-500 mb-2 tracking-widest uppercase">Key Highlights</div>
+                    <ul className="space-y-3 list-disc list-inside">
+                      {(college.usps || []).map((usp, idx) => (
+                        <li key={idx} className="text-lg text-gray-700 leading-relaxed font-medium">{usp}</li>
                       ))}
                     </ul>
                   </div>
-                )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Key Insights & Recommendations */}
+        <div className="mb-20">
+          <div className="flex items-center gap-4 mb-12">
+            <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
+              <span className="text-white font-bold text-xl">💡</span>
+            </div>
+            <h2 className="text-4xl font-bold text-gray-900">Key Insights & Recommendations</h2>
+            <div className="flex-1 h-px bg-gradient-to-r from-indigo-300 to-transparent"></div>
+          </div>
+          
+          <div className="grid grid-cols-1 gap-10">
+            {/* Fit Summary */}
+            <div className="bg-white rounded-3xl shadow-lg p-10 border border-gray-100">
+              <h3 className="text-2xl font-bold text-gray-900 mb-8">Profile Fit Summary</h3>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="flex items-center justify-between p-6 bg-green-50 rounded-2xl">
+                  <span className="font-bold text-gray-700 text-lg">ROI Rating</span>
+                  <span className="font-bold text-green-700 text-xl">{restProps.fitSummary.roi}</span>
+                </div>
+                <div className="flex items-center justify-between p-6 bg-blue-50 rounded-2xl">
+                  <span className="font-bold text-gray-700 text-lg">Acceptance Probability</span>
+                  <span className="font-bold text-blue-700 text-xl">{restProps.fitSummary.acceptance}</span>
+                </div>
+                <div className="flex items-center justify-between p-6 bg-purple-50 rounded-2xl">
+                  <span className="font-bold text-gray-700 text-lg">Peer Match</span>
+                  <span className="font-bold text-purple-700 text-xl">{restProps.fitSummary.peer}</span>
+                </div>
+                <div className="flex items-center justify-between p-6 bg-orange-50 rounded-2xl">
+                  <span className="font-bold text-gray-700 text-lg">Overall Fit</span>
+                  <span className="font-bold text-orange-700 text-xl">{restProps.fitSummary.fitTag}</span>
+                </div>
               </div>
             </div>
-          ))}
+          </div>
         </div>
-      </div>
 
-      {/* Analytics Chart Section */}
-      <div className="px-8 mb-12">
-        <h2 className="text-2xl font-bold text-blue-600 mb-6 pb-2 border-b-2 border-blue-200">
-          College Analytics Overview
-        </h2>
-        <div className="bg-white rounded-2xl border-2 border-blue-100 shadow-lg p-6">
-          <div className="h-96">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis 
-                  dataKey="shortName" 
-                  stroke="#64748b"
-                  fontSize={12}
-                  angle={-45}
-                  textAnchor="end"
-                  height={80}
-                />
-                <YAxis stroke="#64748b" fontSize={12} />
-                <Tooltip content={<CustomTooltip />} />
-                <Legend />
-                <Line
-                  type="monotone"
-                  dataKey="roi"
-                  stroke="#dc2626"
-                  strokeWidth={5} // Increased for prominence
-                  dot={{ fill: '#dc2626', stroke: '#fff', strokeWidth: 3, r: 8 }} // Larger, bolder dots
-                  activeDot={{ r: 12, fill: '#dc2626', stroke: '#fff', strokeWidth: 4 }}
-                  name="ROI (Break-even Years)"
-                  connectNulls={true}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="employmentRate"
-                  stroke="#16a34a"
-                  strokeWidth={5}
-                  dot={{ fill: '#16a34a', stroke: '#fff', strokeWidth: 3, r: 8 }}
-                  activeDot={{ r: 12, fill: '#16a34a', stroke: '#fff', strokeWidth: 4 }}
-                  name="Employment Rate (%)"
-                  connectNulls={true}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="avgSalary"
-                  stroke="#2563eb"
-                  strokeWidth={5}
-                  dot={{ fill: '#2563eb', stroke: '#fff', strokeWidth: 3, r: 8 }}
-                  activeDot={{ r: 12, fill: '#2563eb', stroke: '#fff', strokeWidth: 4 }}
-                  name="Avg Salary (₹L)"
-                  connectNulls={true}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="tuitionFee"
-                  stroke="#7c3aed"
-                  strokeWidth={5}
-                  dot={{ fill: '#7c3aed', stroke: '#fff', strokeWidth: 3, r: 8 }}
-                  activeDot={{ r: 12, fill: '#7c3aed', stroke: '#fff', strokeWidth: 4 }}
-                  name="Tuition Fee (₹L)"
-                  connectNulls={true}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="mt-4 text-sm text-gray-600">
-            <p className="mb-2">
-              <strong>Chart Legend:</strong>
-            </p>
-            <ul className="space-y-1">
-              <li>• <span className="text-red-600 font-medium">ROI (Break-even Years)</span>: Lower is better</li>
-              <li>• <span className="text-green-600 font-medium">Employment Rate (%)</span>: Higher is better</li>
-              <li>• <span className="text-blue-600 font-medium">Average Salary (₹L)</span>: Post-graduation salary expectations</li>
-              <li>• <span className="text-purple-600 font-medium">Tuition Fee (₹L)</span>: Total program cost</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-
-      {/* Summary Metrics */}
-      <div className="px-8 mb-12">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-          <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-6 text-center shadow-md">
-            <div className="text-blue-600 font-semibold text-sm mb-2">
-              Avg Break-even
+        {/* Footer */}
+        <div className="pb-12">
+          <div className="bg-gray-900 text-white rounded-3xl p-12 text-center">
+            <div className="text-3xl font-bold mb-6">Continue Your Journey with Leap Scholar</div>
+            <div className="text-gray-300 text-xl mb-8">
+              Your path to studying abroad starts with the right guidance and support.
             </div>
-            <div className="text-blue-800 font-bold text-2xl">
-              {getAverageBreakEven()}
+            <div className="flex flex-wrap justify-center gap-8 text-gray-400 text-lg">
+              <div className="flex items-center gap-2">
+                <span>🌐</span> www.leapscholar.com
+              </div>
+              <div className="flex items-center gap-2">
+                <span>📧</span> support@leapscholar.com
+              </div>
+              <div className="flex items-center gap-2">
+                <span>📞</span> 1-800-LEAP-NOW
+              </div>
             </div>
           </div>
-          <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl p-6 text-center shadow-md">
-            <div className="text-green-600 font-semibold text-sm mb-2">
-              Employment Rate
-            </div>
-            <div className="text-green-800 font-bold text-2xl">
-              {getEmploymentRate()}
-            </div>
-          </div>
-          <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl p-6 text-center shadow-md">
-            <div className="text-purple-600 font-semibold text-sm mb-2">
-              Avg. Salary
-            </div>
-            <div className="text-purple-800 font-bold text-2xl">
-              {getAverageSalary()}
-            </div>
-          </div>
-          <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-2xl p-6 text-center shadow-md">
-            <div className="text-red-600 font-semibold text-sm mb-2">
-              Total Universities
-            </div>
-            <div className="text-red-800 font-bold text-2xl">
-              {shortlistedColleges.length}
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      {/* Footer */}
-      <div className="border-t border-gray-200 bg-gradient-to-r from-slate-50 to-blue-50 px-8 py-6">
-        <div className="text-blue-600 font-semibold text-base">
-          For best financial support, contact:{" "}
-          <a
-            href="https://yocket.com/finances/inside-loan-sales?source=loaninternal_webinar"
-            className="text-blue-600 underline hover:text-blue-800 transition-colors break-all"
-          >
-            @https://yocket.com/finances/inside-loan-sales?source=loaninternal_webinar
-          </a>
         </div>
       </div>
     </div>

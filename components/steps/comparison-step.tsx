@@ -20,6 +20,7 @@ interface ComparisonStepProps {
   tuitionFees: { [key: string]: string }
   rankingData: { [key: string]: { rank_value: string; rank_provider_name: string } }
   onCollegeToggle: (collegeId: string) => void;
+  userPhone: string;
 }
 
 export default function ComparisonStep({
@@ -32,6 +33,7 @@ export default function ComparisonStep({
   tuitionFees = {},
   rankingData = {},
   onCollegeToggle,
+  userPhone,
 }: ComparisonStepProps) {
   const [selectedTheme, setSelectedTheme] = useState("all")
   // New: State to store fetched metrics for each college
@@ -53,7 +55,7 @@ export default function ComparisonStep({
         fetch("/api/get-comparison-metrics", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ college: college.name }),
+          body: JSON.stringify({ college: college.name, phone: userPhone }),
         })
           .then(async (res) => {
             if (!res.ok) throw new Error(await res.text());
@@ -69,7 +71,7 @@ export default function ComparisonStep({
           .catch(() => {});
       }
     });
-  }, [colleges, fallbackTuitionFees]);
+  }, [colleges, fallbackTuitionFees, userPhone]);
 
   const themes = {
     all: {
@@ -116,7 +118,7 @@ export default function ComparisonStep({
         fetch("/api/get-comparison-metrics", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ college: college.name }),
+          body: JSON.stringify({ college: college.name, phone: userPhone }),
         })
           .then(async (res) => {
             if (!res.ok) throw new Error(await res.text())
@@ -134,7 +136,7 @@ export default function ComparisonStep({
           })
       }
     })
-  }, [selectedColleges])
+  }, [selectedColleges, comparisonMetrics, metricsLoading, userPhone]);
 
   // Add getCostInfo from results-step.tsx for Google Sheet data
   function getCostInfo(college: any) {

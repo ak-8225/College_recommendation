@@ -1,6 +1,7 @@
 // app/api/get-comparison-metrics/route.js
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const { setCache, getCache } = require('../cache');
 
 const IMPROVED_PROMPT = `You are a study abroad data expert specializing in analyzing university metrics for international students.  
 Given the following university name, country, and city (if available), return the latest available and structured data for these indicators:
@@ -40,6 +41,14 @@ export async function POST(req) {
   const country = body.country || "";
   const city = body.city || "";
   const alias = body.alias || "";
+  const phone = body.phone || "";
+
+  // Use phone+college as cache key
+  const cacheKey = `metrics:${phone}:${college}`;
+  const cached = getCache(cacheKey);
+  if (cached) {
+    return new Response(JSON.stringify({ metrics: cached }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
   if (!college || typeof college !== 'string') {
     return new Response(JSON.stringify({
       error: 'Missing college name',
@@ -90,6 +99,7 @@ export async function POST(req) {
     const data = await response.json();
     const resultText = data?.choices?.[0]?.message?.content;
     if (resultText) {
+      setCache(cacheKey, resultText, 60 * 60 * 1000);
       return new Response(JSON.stringify({
         metrics: resultText
       }), { status: 200, headers: { 'Content-Type': 'application/json' } });

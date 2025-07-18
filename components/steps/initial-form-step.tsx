@@ -670,7 +670,7 @@ export default function InitialFormStep({
               courseName: entry.courseName || "",
               campus: entry.campus || "",
               category: entry.category || "",
-              livingCosts: countryLivingCosts,
+              livingCosts: countryLivingCosts, // always defined
               rankingData: collegeRankingData,
               state: cityState.state,
               city: cityState.city,
@@ -693,12 +693,28 @@ export default function InitialFormStep({
               ...college,
               city: college.city || data.city || "",
               state: college.state || data.state || "",
+              livingCosts: college.livingCosts || {
+                accommodation: "₹47K-68K/month",
+                transportation: "₹10K-16K/month",
+                living_expense: "₹12.6L/year",
+              },
             };
           } catch {
             return college;
           }
         };
         generatedColleges = await Promise.all(generatedColleges.map(fillMissingCityState));
+        // Ensure all colleges have required fields and correct types
+        generatedColleges = generatedColleges.map(college => ({
+          ...college,
+          livingCosts: (college as any).livingCosts || {
+            accommodation: "₹47K-68K/month",
+            transportation: "₹10K-16K/month",
+            living_expense: "₹12.6L/year",
+          },
+          city: (college as any).city || "",
+          state: (college as any).state || "",
+        })).filter(college => !!college.livingCosts);
 
         console.log("Generated colleges:", generatedColleges)
 
