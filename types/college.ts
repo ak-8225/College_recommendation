@@ -59,4 +59,4 @@ export interface College {
   city?: string
 }
 
-export type Step = "welcome" | "initial-form" | "profile-form" | "results" | "analysis" | "summary" | "comparison"
+export type Step = "welcome" | "initial-form" | "profile-form" | "results" | "analysis" | "summary" | "comparison" | "loading"

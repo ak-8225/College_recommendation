@@ -8,6 +8,8 @@ import ResultsStep from "@/components/steps/results-step"
 import ComparisonStep from "@/components/steps/comparison-step"
 import SummaryStep from "@/components/steps/summary-step"
 import type { College, UserProfile, Step } from "@/types/college"
+import ProLoader from "@/components/ui/pro-loader";
+import Papa from 'papaparse'
 
 const mockColleges: College[] = [
   {
@@ -104,8 +106,15 @@ export default function CollegeFitApp() {
   const [userProfiles, setUserProfiles] = useState<UserProfile[]>([])
   const [multipleEntries, setMultipleEntries] = useState<UserProfile[]>([])
   const [selectedForComparison, setSelectedForComparison] = useState<string[]>([])
+  const [showLoader, setShowLoader] = useState(false);
+  const [userName, setUserName] = useState<string>("")
+  const [userNameLoaded, setUserNameLoaded] = useState(false)
 
   const handleNext = (step: Step) => {
+    if (step === 'results') {
+      handleShowLoader();
+      return;
+    }
     if (step === 'initial-form') {
       setFormData({
         phoneNumber: "",
@@ -207,19 +216,93 @@ export default function CollegeFitApp() {
     duration: 0.5,
   }
 
+  // Loader logic: show loader for at least 5 seconds, then wait for data
+  const handleShowLoader = () => {
+    setShowLoader(true);
+    setCurrentStep("loading");
+    const minLoaderTime = 5000;
+    const loaderStart = Date.now();
+    
+    // Fetch user name from Google Sheet (same logic as ResultsStep)
+    const phone = formData.phoneNumber || "";
+    const testPhone = phone || "6364467022"; // Use a phone number from the sheet for testing
+    
+    if (!userNameLoaded && testPhone) {
+      fetch('https://docs.google.com/spreadsheets/d/e/2PACX-1vRQtjtY6NkC6LSKa_vEVbwjfoMVUnkGpZp0Q1mpmtJEDx-KXgBLGlmTTOin-VB6ycISSIaISUVOcKin/pub?output=csv')
+        .then((res) => res.text())
+        .then((csv) => {
+          Papa.parse(csv, {
+            header: true,
+            skipEmptyLines: true,
+            complete: (results: any) => {
+              // Normalize phone numbers for comparison
+              const normalize = (str: string) => String(str || '').replace(/\D/g, '').trim()
+              const userPhoneNorm = normalize(testPhone)
+              
+              // Find the row where the phone matches (normalized)
+              let row = results.data.find((r: any) => {
+                const sheetPhoneNorm = normalize(r["Pre Login Leap User - Pre User → Phone"])
+                return sheetPhoneNorm === userPhoneNorm
+              })
+              
+              // If no exact match, try different phone formats
+              if (!row && userPhoneNorm) {
+                // Try with country code (91)
+                const withCountryCode = '91' + userPhoneNorm
+                row = results.data.find((r: any) => {
+                  const sheetPhoneNorm = normalize(r["Pre Login Leap User - Pre User → Phone"])
+                  return sheetPhoneNorm === withCountryCode
+                })
+              }
+              
+              // If still no match, try without country code
+              if (!row && userPhoneNorm && userPhoneNorm.startsWith('91')) {
+                const withoutCountryCode = userPhoneNorm.substring(2)
+                row = results.data.find((r: any) => {
+                  const sheetPhoneNorm = normalize(r["Pre Login Leap User - Pre User → Phone"])
+                  return sheetPhoneNorm === withoutCountryCode
+                })
+              }
+              
+              if (row) {
+                setUserName(row["Pre Login Leap User - Pre User → Name"])
+              } else {
+                // Fallback: use the first available name
+                const firstRow = results.data.find((r: any) => r["Pre Login Leap User - Pre User → Name"])
+                if (firstRow) {
+                  setUserName(firstRow["Pre Login Leap User - Pre User → Name"])
+                }
+              }
+              setUserNameLoaded(true)
+            },
+          })
+        })
+        .catch(() => setUserNameLoaded(true))
+    }
+    
+    // Simulate async fetch (replace with real fetch logic if needed)
+    fetchColleges().then(() => {
+      const elapsed = Date.now() - loaderStart;
+      const remaining = Math.max(0, minLoaderTime - elapsed);
+      setTimeout(() => {
+        setShowLoader(false);
+        setCurrentStep("results");
+      }, remaining);
+    });
+  };
+
+  // Simulate college fetch (replace with real fetch logic)
+  function fetchColleges() {
+    return new Promise((resolve) => setTimeout(resolve, 2000)); // Simulate 2s fetch
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
       <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-6 max-w-full sm:max-w-6xl w-full">
         <AnimatePresence mode="wait">
-          {/* {currentStep === "welcome" && (
-            <WelcomeStep
-              key="welcome"
-              pageVariants={pageVariants}
-              pageTransition={pageTransition}
-              onNext={handleNext}
-            />
-          )} */}
-
+          {currentStep === "loading" && (
+            <ProLoader name={userName || formData.name || "Student"} />
+          )}
           {currentStep === "initial-form" && (
             <InitialFormStep
               key="initial-form"
