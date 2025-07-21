@@ -114,6 +114,43 @@ export default function ComparisonStep({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedColleges]);
 
+  // 1. State for city-wise costs
+  const [cityCosts, setCityCosts] = useState<{ [city: string]: { living: string, accommodation: string, transportation: string } }>({});
+
+  // 2. Fetch city-wise costs for all unique cities
+  useEffect(() => {
+    const uniqueCities = Array.from(new Set(selectedColleges.map(c => c.city).filter(Boolean)));
+    uniqueCities.forEach(async (city) => {
+      if (!cityCosts[city]) {
+        // Use a real college and country for better results if available
+        const collegeForCity = selectedColleges.find(c => c.city === city);
+        const res = await fetch('/api/get-comparison-metrics', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            city,
+            college: collegeForCity?.name || '',
+            country: collegeForCity?.country || ''
+          })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const metricsText = data.metrics || "";
+          // ADD THIS LINE TO DEBUG:
+          console.log("City:", city, "API Metrics Response:", metricsText);
+          const living = metricsText.match(/Living Costs.*?:\s*([^\n]+)/i)?.[1] || "";
+          const accommodation = metricsText.match(/Accommodation Costs.*?:\s*([^\n]+)/i)?.[1] || "";
+          const transportation = metricsText.match(/Transportation Costs.*?:\s*([^\n]+)/i)?.[1] || "";
+          setCityCosts(prev => ({
+            ...prev,
+            [city]: { living, accommodation, transportation }
+          }));
+        }
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedColleges]);
+
   const themes = {
     all: {
       name: "All Categories",
@@ -898,8 +935,11 @@ export default function ComparisonStep({
         fee = fallbackTuitionFees[college.id];
       }
       if (!fee || isTuitionFeeInvalid(fee)) fee = "Approx. ₹8,00,000";
-      // Always show as in the card: ₹X INR per year
-      return `₹${String(fee).replace(/[^\d.]/g, "")} INR per year`;
+      // Show as Lakhs: ₹X.XL per year
+      const num = parseFloat(String(fee).replace(/[^\d.]/g, ""));
+      if (isNaN(num)) return fee;
+      const lakhs = (num / 100000).toFixed(1);
+      return `₹${lakhs}L per year`;
     },
     "Total Cost of Study": (v, college) => {
       // Remove all currency symbols and format as $X,XXX
@@ -908,7 +948,23 @@ export default function ComparisonStep({
       num = Number(num.replace(/,/g, "")).toLocaleString();
       return `$${num}`;
     },
+    // Update the metric formatter for University Ranking
+    "University Ranking": (v, college) => {
+      // Use the exact same format as college cards
+      const rankValue = college.rankingData?.rank_value || "N/A";
+      const rankProvider = college.rankingData?.rank_provider_name || "QS Rankings";
+      return rankValue !== "N/A" ? `Rank #${rankValue}` : "N/A";
+    },
   }
+
+  // Add the formatting function
+  const formatFeeInLakhs = (fee: string) => {
+    // Extract number from string and convert to lakhs
+    const num = parseFloat(fee.replace(/[^\d.]/g, ''));
+    if (isNaN(num)) return fee;
+    const lakhs = (num / 100000).toFixed(1);
+    return `₹${lakhs}L per year`;
+  };
 
   // 1. Compute best metrics count for each college
   const metricsForTheme = getMetricsForTheme();
@@ -1123,7 +1179,7 @@ export default function ComparisonStep({
                           </Button>
                           {/* Best metrics count */}
                           <span className="text-xs font-semibold text-green-700 mt-1">
-                            {bestCounts[college.id]}/{metricsForTheme.length} metrics
+                            {bestCounts[college.id]}/{metricsForTheme.length} matches
                           </span>
                         </div>
                       </th>
@@ -1135,7 +1191,16 @@ export default function ComparisonStep({
                     <tr key={metric.label} className={`border-b hover:bg-gray-50/50 ${rowIdx % 2 === 0 ? "bg-white" : ""}`}>
                       <td className="sticky left-0 z-20 bg-white p-4">
                         <span className="font-medium text-gray-900 flex items-center gap-2 relative">
-                          {metric.label}
+                          {metric.label === "Living Costs (Annual)" || 
+                           metric.label === "Accommodation Costs" || 
+                           metric.label === "Transportation Costs" ? (
+                            <>
+                              {metric.label}
+                              <span className="text-xs text-gray-500 mt-0.5">(avg)</span>
+                            </>
+                          ) : (
+                            metric.label
+                          )}
                         </span>
                       </td>
                       {selectedColleges.map((college, idx) => {

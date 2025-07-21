@@ -248,6 +248,13 @@ function formatTuitionFeeLakh(fee: number | string) {
   return `₹${(num / 100000).toFixed(1)}L`;
 }
 
+// Add this utility function at the top (if not already present)
+function formatFeeInLakhs(fee: string | number) {
+  const num = typeof fee === "string" ? parseFloat(fee.replace(/[^\d.]/g, "")) : fee;
+  if (isNaN(num)) return fee;
+  return `₹${(num / 100000).toFixed(1)}L`;
+}
+
 export default function ResultsStep({
   pageVariants,
   pageTransition,
@@ -946,6 +953,46 @@ export default function ResultsStep({
     }
   };
 
+  // Inside your college card component, update the priority bar styling
+  const getPriorityStyle = (index: number) => {
+    switch(index) {
+      case 0:
+        return {
+          background: 'linear-gradient(135deg, #FFD700 0%, #FFF5D4 30%, #FFE87C 47%, #FED73B 53%, #FFF5D4 70%, #FFD700 100%)',
+          borderBottom: '2px solid #FFB347',
+          color: '#704A00',
+          boxShadow: '0 2px 15px rgba(255, 215, 0, 0.3)',
+          textShadow: '0 1px 2px rgba(255, 255, 255, 0.8)',
+          fontWeight: '700'
+        };
+      case 1:
+        return {
+          background: 'linear-gradient(135deg, #C0C0C0 0%, #FFFFFF 30%, #E8E8E8 47%, #C0C0C0 53%, #FFFFFF 70%, #C0C0C0 100%)',
+          borderBottom: '2px solid #A8A8A8',
+          color: '#3A3A3A',
+          boxShadow: '0 2px 15px rgba(192, 192, 192, 0.3)',
+          textShadow: '0 1px 2px rgba(255, 255, 255, 0.8)',
+          fontWeight: '700'
+        };
+      case 2:
+        return {
+          background: 'linear-gradient(135deg, #CD7F32 0%, #FFC1A1 30%, #E3A875 47%, #CD7F32 53%, #FFC1A1 70%, #CD7F32 100%)',
+          borderBottom: '2px solid #B87333',
+          color: '#4A2800',
+          boxShadow: '0 2px 15px rgba(205, 127, 50, 0.3)',
+          textShadow: '0 1px 2px rgba(255, 255, 255, 0.8)',
+          fontWeight: '700'
+        };
+      default:
+        return {
+          background: 'linear-gradient(to right, #0066FF, #0052CC)',
+          borderBottom: '1px solid #0052CC',
+          color: '#FFFFFF',
+          fontWeight: '600'
+        };
+    }
+  };
+
   return (
     <TooltipProvider>
       <motion.div
@@ -1049,16 +1096,14 @@ export default function ResultsStep({
                         >
                           {/* Priority Bar */}
                           <div
-                            className="w-full -mx-3 -mt-3 mb-3 bg-gradient-to-r from-yellow-100 via-yellow-50 to-yellow-100 border-b border-yellow-300 flex items-center justify-center"
+                            className="w-full -mx-3 -mt-3 mb-3 flex items-center justify-center"
                             style={{
                               borderTopLeftRadius: '0.9rem',
                               borderTopRightRadius: '0.9rem',
-                              fontWeight: 600,
                               fontSize: '0.95rem',
-                              color: '#8B5C00',
                               letterSpacing: '0.03em',
                               padding: '0.6rem',
-                              boxShadow: '0 1px 2px rgba(234, 179, 8, 0.1)'
+                              ...getPriorityStyle(index)  // This line is crucial
                             }}
                           >
                             {`${index + 1}${index === 0 ? 'st' : index === 1 ? 'nd' : index === 2 ? 'rd' : 'th'} College`}
@@ -1148,47 +1193,6 @@ export default function ResultsStep({
                                     >
                                       Compare
                                     </Button>
-                                    <span className="flex items-center gap-1 px-3 py-1 rounded-full bg-blue-50 text-blue-800 font-bold text-base border border-blue-200 shadow-sm">
-                                      <span className="font-semibold mr-1">College Fit Score:</span>
-                                      {fitScoreLoading[college.id]
-                                        ? <span className="text-xs text-gray-400">Loading...</span>
-                                        : (fitScores[college.id] !== undefined ? `${fitScores[college.id]}%` : "N/A")}
-                                    </span>
-                                    <TooltipProvider>
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <Button className="ml-2 p-1 rounded-full bg-blue-100 text-blue-700 text-xs" style={{ width: 22, height: 22, minWidth: 22, minHeight: 22 }}>
-                                            <Info className="w-3.5 h-3.5" />
-                                          </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent className="max-w-xs text-xs text-gray-800 z-50" side="bottom" align="center">
-                                          <div className="font-bold mb-1">College Fit Score</div>
-                                          <div className="mb-1">This score is calculated based on:
-                                            <ul className="list-disc ml-4">
-                                              <li>Ranking</li>
-                                              <li>Budget</li>
-                                              <li>Break-even (ROI)</li>
-                                              <li>Tuition Fee</li>
-                                              <li><span className="font-semibold text-blue-700">Your selected priorities (weighted most)</span></li>
-                                            </ul>
-                                          </div>
-                                          <div className="mb-1">Key Metrics for this college:
-                                            <ul className="list-disc ml-4">
-                                              <li>Ranking: {college.rankingData && college.rankingData.rank_value !== "N/A"
-                                                ? `Rank #${college.rankingData.rank_value} (${college.rankingData.rank_provider_name})`
-                                                : "N/A"}</li>
-                                              <li>Tuition Fee: {formatTuitionFeeLakh(college.tuitionFee)}</li>
-                                              <li>Break-even: {(() => {
-                                                let roi = roiData[college.id];
-                                                if (typeof roi !== 'number' || isNaN(roi) || roi > 6) roi = 6;
-                                                return roi ? `${roi} years` : 'N/A';
-                                              })()}</li>
-                                            </ul>
-                                          </div>
-                                          <div className="text-gray-500">Your priorities are weighted more heavily in this score.</div>
-                                        </TooltipContent>
-                                      </Tooltip>
-                                    </TooltipProvider>
                                   </div>
                                 </div>
                                 {/* USPs Section */}

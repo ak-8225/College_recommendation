@@ -15,12 +15,12 @@ export default function ProLoader({ name }: { name: string }) {
       <div className="relative z-10 text-center max-w-2xl mx-auto px-6">
         {/* Enhanced greeting with better typography */}
         <div className="mb-12">
-          <h1 className="text-5xl md:text-7xl font-extrabold text-gray-800 mb-4 font-serif tracking-tight">
-            Hello{" "}
-            <span className="bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-800 bg-clip-text text-transparent animate-gradient-x drop-shadow-sm">
+          <div className="text-4xl font-bold text-center">
+            <span className="text-gray-800">Hello </span>
+            <span className="bg-gradient-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent inline-block">
               {name}
             </span>
-          </h1>
+          </div>
           <div className="w-32 h-1.5 bg-gradient-to-r from-blue-500 via-purple-500 to-indigo-600 rounded-full mx-auto animate-pulse shadow-lg"></div>
         </div>
 

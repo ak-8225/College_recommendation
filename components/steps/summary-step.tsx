@@ -732,42 +732,47 @@ export default function SummaryStep({
     { university: "University of Dundee", rate: 92, salary: 29200 },
   ];
 
-  // Ensure each bar's height reflects the break-even (roi) value for the college
+  // ROI Data for the chart
   const robustROIData = (likedColleges.length > 0
     ? likedColleges.map((college, index) => {
         let roi = collegeRoiData[college.id];
-        // If the value is missing, zero, negative, or not a number, use a default
+        // If the value is missing, zero, negative, or not a number, use fallback/sample value
         if (typeof roi !== 'number' || roi <= 0 || isNaN(roi)) {
-          // Generate realistic ROI based on college ranking and tuition
-          const baseROI = 3.0;
-          const rankingFactor = college.ranking ? Math.max(0.5, Math.min(2.0, 15 / parseInt(String(college.ranking)))) : 1.0;
-          const tuitionFactor = college.tuitionFee ? Math.max(0.8, Math.min(1.5, 800000 / parseFloat(college.tuitionFee.replace(/[^\d]/g, "")))) : 1.0;
-          roi = baseROI * rankingFactor * tuitionFactor;
+          // Use fallback value from fallbackROIData if available, else a static default
+          const fallback = fallbackROIData[index % fallbackROIData.length];
+          roi = fallback ? fallback.roi : 3.2 + index * 0.3;
         }
         return { name: college.name, roi: Number(roi.toFixed(1)) };
       })
     : fallbackROIData
   );
   const safeROIData = robustROIData.filter(d => typeof d.roi === 'number' && d.roi > 0);
-  if (safeROIData.length === 0) safeROIData.push({ name: 'Sample University', roi: 3.2 });
-  
-  // Generate robust Employment data for any university
+  if (safeROIData.length === 0 && likedColleges.length > 0) {
+    // If all data is missing, show fallback bars for each liked college
+    likedColleges.forEach((college, i) => {
+      const fallback = fallbackROIData[i % fallbackROIData.length];
+      safeROIData.push({ name: college.name, roi: fallback ? fallback.roi : 3.2 + i * 0.3 });
+    });
+  }
+
+  // Employment Data for the chart
   const robustEmploymentData = (likedColleges.length > 0
     ? likedColleges.map((college, index) => {
-        // Generate realistic employment data based on college properties
-        const baseRate = 85 + (college.ranking ? Math.max(0, 15 - parseInt(String(college.ranking)) / 10) : 5);
-        const baseSalary = 25000 + (college.ranking ? Math.max(0, 20000 - parseInt(String(college.ranking)) * 100) : 5000);
-        
-        let rate = Math.min(100, Math.max(70, baseRate + (index * 2)));
-        let salary = Math.max(20000, baseSalary + (index * 1500));
-        
-        if (!rate || rate <= 0 || isNaN(rate)) rate = 85;
-        if (!salary || salary <= 0 || isNaN(salary)) salary = 25000;
+        // Use fallback/sample data if real data is missing
+        const fallback = fallbackEmploymentData[index % fallbackEmploymentData.length];
+        let rate = fallback.rate;
+        let salary = fallback.salary;
         return { university: college.name, rate, salary };
       })
     : fallbackEmploymentData
   );
   const safeEmploymentData = robustEmploymentData.length > 0 ? robustEmploymentData : fallbackEmploymentData;
+  if (safeEmploymentData.length === 0 && likedColleges.length > 0) {
+    likedColleges.forEach((college, i) => {
+      const fallback = fallbackEmploymentData[i % fallbackEmploymentData.length];
+      safeEmploymentData.push({ university: college.name, rate: fallback.rate, salary: fallback.salary });
+    });
+  }
   const employmentData = (likedColleges.length > 0 ? generateEmploymentData() : fallbackEmploymentData)
     .filter(d => d && typeof d.rate === 'number' && d.rate > 0 && typeof d.salary === 'number' && d.salary > 0);
 
@@ -1334,22 +1339,6 @@ export default function SummaryStep({
           </TabsContent>
         </Tabs>
 
-        {/* Financial Support Section */}
-        <Card className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
-          <div className="text-center">
-            <p className="text-gray-700">
-              For best financial loan support, contact{" "}
-              <a
-                href="https://yocket.com/finances/inside-loan-sales?source=loaninternal_webinar"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-600 hover:text-blue-800 underline font-medium"
-              >
-                Yocket Financial Services
-              </a>
-            </p>
-          </div>
-        </Card>
       </motion.div>
     </TooltipProvider>
   )
