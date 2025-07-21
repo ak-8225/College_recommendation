@@ -1184,12 +1184,13 @@ export default function SummaryStep({
           <TabsContent value="overview" className="space-y-6">
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
               {/* ROI Analysis Chart - More Visual */}
+              {console.log("safeROIData", safeROIData)}
               <ChartCard title="Break-even (ROI) Analysis">
                 <ResponsiveContainer width={"100%"} height={400}>
                   <BarChart
-                    data={safeROIData}
+                    data={safeROIData.length > 0 ? safeROIData : [{ name: 'Test University', roi: 1.5 }]} // fallback for testing
                     margin={{ top: 30, right: 30, left: 30, bottom: 60 }}
-                    barCategoryGap="25%"
+                    barCategoryGap="20%" // Adjusted for better bar width
                   >
                     <CartesianGrid strokeDasharray="3 3" stroke="#e0e7ef" />
                     <XAxis
@@ -1205,8 +1206,22 @@ export default function SummaryStep({
                       tick={{ fontSize: 13, fill: "#444", fontWeight: 600 }}
                       axisLine={false}
                       tickLine={false}
-                      domain={roiDomain}
-                      label={{ value: "Break-even (Years)", angle: -90, position: "insideLeft", fontSize: 15, fill: "#4F46E5", fontWeight: 700 }}
+                      // Force a minimum domain for visibility
+                      domain={[
+                        0,
+                        (() => {
+                          const maxRoi = Math.max(...safeROIData.map(d => d.roi), 0);
+                          return maxRoi < 2 ? 2 : Math.ceil(maxRoi + 0.5);
+                        })()
+                      ]}
+                      label={{
+                        value: "Break-even (Years)",
+                        angle: -90,
+                        position: "insideLeft",
+                        fontSize: 15,
+                        fill: "#4F46E5",
+                        fontWeight: 700
+                      }}
                     />
                     <ChartTooltip
                       content={({ active, payload, label }) => {
@@ -1222,15 +1237,12 @@ export default function SummaryStep({
                         return null
                       }}
                     />
-                    {/* In the ROI BarChart, update the Bar to match the screenshot style */}
                     <Bar
                       dataKey="roi"
-                      fill="#4F46E5"
+                      fill="red" // Use a highly visible color for debugging
                       radius={[12, 12, 0, 0]}
-                      maxBarSize={90}
                       isAnimationActive={true}
                     />
-                    {/* Remove gradient defs from BarChart */}
                   </BarChart>
                 </ResponsiveContainer>
               </ChartCard>

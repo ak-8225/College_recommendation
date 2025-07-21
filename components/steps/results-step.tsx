@@ -21,7 +21,7 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useMemo } from "react"
 import type { Step, College } from "@/types/college"
 import Papa from 'papaparse'
 import type { ParseResult } from 'papaparse'
@@ -220,66 +220,73 @@ function getCollegeRecruiters(college: College) {
 }
 
 // Helper to calculate a unique fit score for each college
-function calculateFitScore({ college, allColleges, userBudget, priorities }: {
-  college: College,
-  allColleges: College[],
-  userBudget: string,
-  priorities: string[],
-}): number {
-  // Normalize values for all colleges
-  const rankings = allColleges.map((c: College) => Number(c.rankingData?.rank_value) || 1000);
-  const tuitions = allColleges.map((c: College) => parseFloat((c.tuitionFee || "0").replace(/[^\d.]/g, "")) || 0);
-  const rois = allColleges.map((c: College) => typeof c.roi === 'number' ? c.roi : (parseFloat(c.roi) || 5));
-  const budgets = allColleges.map((c: College) => parseFloat((userBudget || "0").replace(/[^\d.]/g, "")) || 0);
+// function calculateFitScore({ college, allColleges, userBudget, priorities }: {
+//   college: College,
+//   allColleges: College[],
+//   userBudget: string,
+//   priorities: string[],
+// }): number {
+//   // Normalize values for all colleges
+//   const rankings = allColleges.map((c: College) => Number(c.rankingData?.rank_value) || 1000);
+//   const tuitions = allColleges.map((c: College) => parseFloat((c.tuitionFee || "0").replace(/[^\d.]/g, "")) || 0);
+//   const rois = allColleges.map((c: College) => typeof c.roi === 'number' ? c.roi : (parseFloat(c.roi) || 5));
+//   const budgets = allColleges.map((c: College) => parseFloat((userBudget || "0").replace(/[^\d.]/g, "")) || 0);
 
-  // Normalize functions
-  const norm = (val: number, arr: number[], invert = false) => {
-    const min = Math.min(...arr);
-    const max = Math.max(...arr);
-    if (max === min) return 1;
-    let score = (val - min) / (max - min);
-    if (invert) score = 1 - score;
-    return score;
-  };
+//   // Normalize functions
+//   const norm = (val: number, arr: number[], invert = false) => {
+//     const min = Math.min(...arr);
+//     const max = Math.max(...arr);
+//     if (max === min) return 1;
+//     let score = (val - min) / (max - min);
+//     if (invert) score = 1 - score;
+//     return score;
+//   };
 
-  // Extract values for this college
-  const ranking = Number(college.rankingData?.rank_value) || 1000;
-  const tuition = parseFloat((college.tuitionFee || "0").replace(/[^\d.]/g, "")) || 0;
-  const roi = typeof college.roi === 'number' ? college.roi : (parseFloat(college.roi) || 5);
-  const budget = parseFloat((userBudget || "0").replace(/[^\d.]/g, "")) || 0;
+//   // Extract values for this college
+//   const ranking = Number(college.rankingData?.rank_value) || 1000;
+//   const tuition = parseFloat((college.tuitionFee || "0").replace(/[^\d.]/g, "")) || 0;
+//   const roi = typeof college.roi === 'number' ? college.roi : (parseFloat(college.roi) || 5);
+//   const budget = parseFloat((userBudget || "0").replace(/[^\d.]/g, "")) || 0;
 
-  // Priority weights
-  const priorityWeights = {
-    ranking: priorities.includes("ranking") ? 2 : 1,
-    budget: priorities.includes("budget") ? 2 : 1,
-    roi: priorities.includes("roi") ? 2 : 1,
-    tuition_fee: priorities.includes("tuition_fee") ? 2 : 1,
-  };
-  const totalWeight = priorityWeights.ranking + priorityWeights.budget + priorityWeights.roi + priorityWeights.tuition_fee;
+//   // Priority weights
+//   const priorityWeights = {
+//     ranking: priorities.includes("ranking") ? 2 : 1,
+//     budget: priorities.includes("budget") ? 2 : 1,
+//     roi: priorities.includes("roi") ? 2 : 1,
+//     tuition_fee: priorities.includes("tuition_fee") ? 2 : 1,
+//   };
+//   const totalWeight = priorityWeights.ranking + priorityWeights.budget + priorityWeights.roi + priorityWeights.tuition_fee;
 
-  // Individual scores (normalized, 0-1)
-  const rankingScore = norm(ranking, rankings, true) * priorityWeights.ranking;
-  const budgetScore = norm(budget, tuitions, true) * priorityWeights.budget;
-  const roiScore = norm(roi, rois, true) * priorityWeights.roi;
-  const tuitionScore = norm(tuition, tuitions, true) * priorityWeights.tuition_fee;
+//   // Individual scores (normalized, 0-1)
+//   const rankingScore = norm(ranking, rankings, true) * priorityWeights.ranking;
+//   const budgetScore = norm(budget, tuitions, true) * priorityWeights.budget;
+//   const roiScore = norm(roi, rois, true) * priorityWeights.roi;
+//   const tuitionScore = norm(tuition, tuitions, true) * priorityWeights.tuition_fee;
 
-  // Final fit score (weighted average, 0-1)
-  let fitScore = (rankingScore + budgetScore + roiScore + tuitionScore) / totalWeight;
+//   // Final fit score (weighted average, 0-1)
+//   let fitScore = (rankingScore + budgetScore + roiScore + tuitionScore) / totalWeight;
 
-  // Add a small unique offset based on college id/name for uniqueness
-  let hash = 0;
-  for (let i = 0; i < college.name.length; i++) hash += college.name.charCodeAt(i);
-  fitScore += (hash % 13) * 0.001;
+//   // Add a small unique offset based on college id/name for uniqueness
+//   let hash = 0;
+//   for (let i = 0; i < college.name.length; i++) hash += college.name.charCodeAt(i);
+//   fitScore += (hash % 13) * 0.001;
 
-  // Clamp and convert to percentage
-  fitScore = Math.max(0, Math.min(1, fitScore));
-  return Math.round(fitScore * 100);
-}
+//   // Clamp and convert to percentage
+//   fitScore = Math.max(0, Math.min(1, fitScore));
+//   return Math.round(fitScore * 100);
+// }
 
 function formatPriority(priority: string) {
   return priority.toLowerCase() === "roi"
     ? "ROI"
     : priority.charAt(0).toUpperCase() + priority.slice(1).replace(/_/g, " ");
+}
+
+// 1. Format tuition fee in lakhs for the info popup
+function formatTuitionFeeLakh(fee: number | string) {
+  const num = typeof fee === "string" ? parseFloat(fee.replace(/[^\d.]/g, "")) : fee;
+  if (isNaN(num)) return "N/A";
+  return `₹${(num / 100000).toFixed(1)}L`;
 }
 
 export default function ResultsStep({
@@ -293,6 +300,9 @@ export default function ResultsStep({
   onNext,
   onBack,
 }: ResultsStepProps) {
+  // Fixed: Define userSelectedPriorities directly from userProfile
+  const userSelectedPriorities = userProfile?.priorities || [];
+
   const [selectedCollegeForDetails, setSelectedCollegeForDetails] = useState<College | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [hoveredCollege, setHoveredCollege] = useState<string | null>(null)
@@ -954,6 +964,24 @@ export default function ResultsStep({
     }
   };
 
+  const ALL_PARAMS = [
+    "Ranking",
+    "Budget Compatibility",
+    "ROI",
+    "Tuition Fee",
+    "Living Cost",
+    "Scholarships",
+    "Location",
+    "Employability Rate",
+  ];
+
+  const fitScoreWeights = useMemo(
+    () => generateWeights(userSelectedPriorities, ALL_PARAMS),
+    [userSelectedPriorities]
+  );
+
+  const [showFitScoreInfo, setShowFitScoreInfo] = useState<string | null>(null);
+
   return (
     <TooltipProvider>
       <motion.div
@@ -1042,6 +1070,15 @@ export default function ResultsStep({
                   const details = getCollegeDetails(college)
                   const isHovered = hoveredCollege === college.id
 
+                  // Prepare a normalized college object for scoring
+                  const normalizedCollege: Record<string, number> = {};
+                  ALL_PARAMS.forEach(param => {
+                    // If your college object uses different keys, map accordingly here
+                    normalizedCollege[param] = college[param] ?? 0;
+                  });
+
+                  const fitScore = calculateFitScore(normalizedCollege, fitScoreWeights);
+
                   return (
                     <Draggable key={college.id} draggableId={college.id} index={index}>
                       {(draggableProvided, snapshot) => (
@@ -1096,10 +1133,9 @@ export default function ResultsStep({
                                     <div className="flex flex-wrap items-center gap-1 mb-0.5">
                                       <div className="flex items-center gap-1 bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full text-xs font-medium">
                                         <Star className="w-3 h-3 mr-1 align-middle" />
-                                        Rank #{college.ranking}
-                                        {college.rankingData?.rank_provider_name && (
-                                          <span className="ml-1 text-gray-500 text-[10px] font-normal">{college.rankingData.rank_provider_name}</span>
-                                        )}
+                                        {college.rankingData && college.rankingData.rank_value !== "N/A"
+                                          ? `Rank #${college.rankingData.rank_value} (${college.rankingData.rank_provider_name})`
+                                          : "N/A"}
                                       </div>
                                       <div className="flex items-center gap-1 bg-green-100 text-green-800 px-2 py-0.5 rounded-full text-xs font-medium">
                                         {(() => {
@@ -1161,12 +1197,9 @@ export default function ResultsStep({
                                       <TooltipProvider>
                                         <Tooltip>
                                           <TooltipTrigger asChild>
-                                            <button
-                                              type="button"
-                                              className="ml-1 w-7 h-7 flex items-center justify-center rounded-full bg-blue-100 border border-blue-300 text-blue-700 hover:bg-blue-200 hover:text-blue-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-                                            >
-                                              <Info className="w-4 h-4 align-middle" />
-                                            </button>
+                                            <Button className="ml-2 p-1 rounded-full bg-blue-100 text-blue-700 text-xs" style={{ width: 22, height: 22, minWidth: 22, minHeight: 22 }}>
+                                              <Info className="w-3.5 h-3.5" />
+                                            </Button>
                                           </TooltipTrigger>
                                           <TooltipContent className="max-w-xs text-xs text-gray-800 z-50" side="bottom" align="center">
                                             <div className="font-bold mb-1">College Fit Score</div>
@@ -1181,8 +1214,10 @@ export default function ResultsStep({
                                             </div>
                                             <div className="mb-1">Key Metrics for this college:
                                               <ul className="list-disc ml-4">
-                                                <li>Ranking: {college.rankingData?.rank_value || 'N/A'}</li>
-                                                <li>Tuition Fee: {college.tuitionFee || 'N/A'}</li>
+                                                <li>Ranking: {college.rankingData && college.rankingData.rank_value !== "N/A"
+                                                  ? `Rank #${college.rankingData.rank_value} (${college.rankingData.rank_provider_name})`
+                                                  : "N/A"}</li>
+                                                <li>Tuition Fee: {formatTuitionFeeLakh(college.tuitionFee)}</li>
                                                 <li>Break-even: {(() => {
                                                   let roi = roiData[college.id];
                                                   if (typeof roi !== 'number' || isNaN(roi) || roi > 6) roi = 6;
@@ -1263,30 +1298,6 @@ export default function ResultsStep({
                             </div>
                             {/* Right Section: Key Metrics and Notes */}
                             <div className="flex flex-col items-start min-w-[220px] max-w-[260px] ml-6">
-                              <Card className="bg-gradient-to-br from-gray-50 to-white p-4 rounded-xl border w-full mb-3">
-                                <div className="text-xs text-blue-700 font-semibold mb-1">Net monthly spend</div>
-                                <div className="text-xs text-gray-700">
-                                  {(() => {
-                                    const acc = parseInt(getCostInfo(college)?.accommodation?.toString().replace(/[^\d]/g, "")) || 0;
-                                    const trans = parseInt(getCostInfo(college)?.transportation?.toString().replace(/[^\d]/g, "")) || 0;
-                                    const living = parseInt(getCostInfo(college)?.living_expense?.toString().replace(/[^\d]/g, "")) || 0;
-                                    const partTime = parseInt(getCostInfo(college)?.part_time_work?.toString().replace(/[^\d]/g, "")) || 0;
-                                    const net = acc + trans + living - partTime;
-                                    return (
-                                      <div className="space-y-1">
-                                        <div>Accommodation: <span className="font-medium">₹{acc.toLocaleString()}</span> /month</div>
-                                        <div>Transportation: <span className="font-medium">₹{trans.toLocaleString()}</span> /month</div>
-                                        <div>Living: <span className="font-medium">₹{living.toLocaleString()}</span> /month</div>
-                                        <div>Part-time: <span className="font-medium">₹{partTime.toLocaleString()}</span> /month</div>
-                                        <div className="border-t border-gray-200 my-2"></div>
-                                        <div className="font-semibold text-base text-blue-900 flex items-center gap-2">
-                                          Net monthly spend = <span className="font-mono">(₹{acc.toLocaleString()} + ₹{trans.toLocaleString()} + ₹{living.toLocaleString()}) - ₹{partTime.toLocaleString()} = <span className='text-green-700'>₹{net.toLocaleString()}</span></span>
-                                        </div>
-                                      </div>
-                                    );
-                                  })()}
-                                </div>
-                              </Card>
                               <div className="flex flex-col gap-2 w-full">
                                 <button
                                   className="flex items-center gap-1 text-xs font-semibold text-gray-700 mb-1 hover:text-blue-700 transition"
@@ -1503,4 +1514,45 @@ export default function ResultsStep({
       </motion.div>
     </TooltipProvider>
   )
+}
+
+const ALL_PARAMS = [
+  "Ranking",
+  "Budget Compatibility",
+  "ROI",
+  "Tuition Fee",
+  "Living Cost",
+  "Scholarships",
+  "Location",
+  "Employability Rate",
+];
+
+function generateWeights(preferred: string[], allParams: string[]): Record<string, number> {
+  const weights: Record<string, number> = {};
+  const nonPreferred = allParams.filter(p => !preferred.includes(p));
+
+  const priorityWeightTotal = 0.60;
+  const otherWeightTotal = 0.40;
+
+  const priorityWeight = preferred.length > 0 ? priorityWeightTotal / preferred.length : 0;
+  const otherWeight = nonPreferred.length > 0 ? otherWeightTotal / nonPreferred.length : 0;
+
+  allParams.forEach(param => {
+    if (preferred.includes(param)) {
+      weights[param] = priorityWeight;
+    } else {
+      weights[param] = otherWeight;
+    }
+  });
+
+  return weights;
+}
+
+function calculateFitScore(college: Record<string, number>, weights: Record<string, number>) {
+  let score = 0;
+  for (const param in weights) {
+    const value = college[param] || 0;
+    score += value * weights[param];
+  }
+  return Math.min(score * 100, 95);  // score out of 100, capped at 95%
 }
