@@ -21,7 +21,7 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { useState, useRef, useEffect, useMemo } from "react"
+import { useState, useRef, useEffect } from "react"
 import type { Step, College } from "@/types/college"
 import Papa from 'papaparse'
 import type { ParseResult } from 'papaparse'
@@ -45,80 +45,39 @@ interface ResultsStepProps {
   onBack: () => void
 }
 
+// First, update the initial USP data
 const countryUSPs: Record<string, string[]> = {
-  UK: [
-    "Globally ranked universities like Oxford and Cambridge",
-    "1-year master's programs save time and cost",
-    "Post-study work visa up to 2 years (Graduate Route)",
-    "Strong industry-academic partnerships",
-    "High-quality research and innovation output",
-    "Cultural diversity in cities like London and Manchester",
-    "Affordable healthcare via NHS for international students",
-    "Access to Europe for travel and internships",
-    "English-speaking academic and social environment",
-    "Wide range of scholarships for Indian students"
+  "UK": [
+    "Strong STEM programs with extensive industry links and research opportunities",
+    "Large Indian student community and active Indian cultural organizations on campus",
+    "No language barrier, all courses conducted in English",
+    "Scholarship opportunities available for Indian students",
+    "Post study work visa up to 2 years (Graduate Route)",
+    "Strong industry academic partnerships",
+    "High quality research and innovation output",
+    "English speaking academic and social environment",
+    "Fast growing economy with demand for skilled grads",
+    "Compact 1 year master's programs",
+    "Tax free stipend options through internships and placements",
+    "Close knit university campuses and vibrant student life"
   ],
-  Ireland: [
-    "Home to tech giants like Google, Facebook, Apple",
-    "2-year post-study work visa after graduation",
-    "English-speaking, friendly and safe environment",
-    "Fast-growing economy with demand for skilled grads",
-    "Compact 1-year master's programs",
-    "Tax-free stipend options through internships and placements",
-    "Highly ranked for computer science and pharma",
-    "EU access with job mobility opportunities",
-    "Close-knit university campuses and vibrant student life",
-    "Free healthcare access for students in some cases"
+  "USA": [
+    "Top ranked universities like MIT, Stanford, and Harvard",
+    "High post study work permit up to 3 years",
+    "Co op programs offer paid work experience",
+    "High quality of life and work life balance"
   ],
-  USA: [
-    "Top-ranked universities like MIT, Stanford, and Harvard",
-    "Flexible curriculum with major/minor combinations",
-    "Access to OPT (up to 3 years for STEM fields)",
-    "Diverse campus communities across all 50 states",
-    "Strong alumni networks and job placement outcomes",
-    "High research funding and assistantship opportunities",
-    "Hub for tech, business, and creative industries",
-    "Large Indian student community and support groups",
-    "World leader in innovation and entrepreneurship",
-    "Scholarships and assistantships available for merit students"
+  "Germany": [
+    "Free or low cost education even for international students",
+    "World renowned for engineering and tech programs",
+    "18 month post study job search visa"
   ],
-  Canada: [
-    "High post-study work permit up to 3 years",
-    "Pathway to PR through study+work",
-    "Affordable tuition compared to USA/UK",
-    "Top institutions like UBC, Toronto, McGill",
-    "Safe, inclusive, and multicultural society",
-    "STEM and business job market in high demand",
-    "Co-op programs offer paid work experience",
-    "Universal healthcare access (in most provinces)",
-    "Indian diaspora support in major cities",
-    "High quality of life and work-life balance"
-  ],
-  Germany: [
-    "Free or low-cost education even for international students",
-    "World-renowned for engineering and tech programs",
-    "Strong ties to automotive and manufacturing industries",
-    "Courses in English increasingly available",
-    "18-month post-study job search visa",
-    "Located in heart of Europe with easy travel",
-    "High research output and innovation funding",
-    "Low living costs in smaller cities",
-    "Public transport and infrastructure excellence",
-    "Globally recognized public universities like TU Munich"
-  ],
-  NewZealand: [
-    "2-3 year post-study work visa based on course level",
-    "Safe, peaceful, and environmentally rich country",
-    "Globally ranked universities like University of Auckland",
-    "Supportive immigration policies for skilled grads",
-    "Affordable compared to Australia and UK",
-    "High employability in agriculture, health, IT, and hospitality",
-    "Excellent student-teacher ratios and learning support",
-    "Opportunities for part-time work while studying",
-    "Unique Maori cultural exposure and global outlook",
-    "Adventure and travel opportunities alongside studies"
+  "Australia": [
+    "2 3 year post study work visa based on course level",
+    "Excellent student teacher ratios and learning support",
+    "Opportunities for part time work while studying"
   ]
-}
+};
 
 function getCollegeUSPsByCountry(country: string): string[] {
   // Normalize country name for matching
@@ -220,61 +179,61 @@ function getCollegeRecruiters(college: College) {
 }
 
 // Helper to calculate a unique fit score for each college
-// function calculateFitScore({ college, allColleges, userBudget, priorities }: {
-//   college: College,
-//   allColleges: College[],
-//   userBudget: string,
-//   priorities: string[],
-// }): number {
-//   // Normalize values for all colleges
-//   const rankings = allColleges.map((c: College) => Number(c.rankingData?.rank_value) || 1000);
-//   const tuitions = allColleges.map((c: College) => parseFloat((c.tuitionFee || "0").replace(/[^\d.]/g, "")) || 0);
-//   const rois = allColleges.map((c: College) => typeof c.roi === 'number' ? c.roi : (parseFloat(c.roi) || 5));
-//   const budgets = allColleges.map((c: College) => parseFloat((userBudget || "0").replace(/[^\d.]/g, "")) || 0);
+function calculateFitScore({ college, allColleges, userBudget, priorities }: {
+  college: College,
+  allColleges: College[],
+  userBudget: string,
+  priorities: string[],
+}): number {
+  // Normalize values for all colleges
+  const rankings = allColleges.map((c: College) => Number(c.rankingData?.rank_value) || 1000);
+  const tuitions = allColleges.map((c: College) => parseFloat((c.tuitionFee || "0").replace(/[^\d.]/g, "")) || 0);
+  const rois = allColleges.map((c: College) => typeof c.roi === 'number' ? c.roi : (parseFloat(c.roi) || 5));
+  const budgets = allColleges.map((c: College) => parseFloat((userBudget || "0").replace(/[^\d.]/g, "")) || 0);
 
-//   // Normalize functions
-//   const norm = (val: number, arr: number[], invert = false) => {
-//     const min = Math.min(...arr);
-//     const max = Math.max(...arr);
-//     if (max === min) return 1;
-//     let score = (val - min) / (max - min);
-//     if (invert) score = 1 - score;
-//     return score;
-//   };
+  // Normalize functions
+  const norm = (val: number, arr: number[], invert = false) => {
+    const min = Math.min(...arr);
+    const max = Math.max(...arr);
+    if (max === min) return 1;
+    let score = (val - min) / (max - min);
+    if (invert) score = 1 - score;
+    return score;
+  };
 
-//   // Extract values for this college
-//   const ranking = Number(college.rankingData?.rank_value) || 1000;
-//   const tuition = parseFloat((college.tuitionFee || "0").replace(/[^\d.]/g, "")) || 0;
-//   const roi = typeof college.roi === 'number' ? college.roi : (parseFloat(college.roi) || 5);
-//   const budget = parseFloat((userBudget || "0").replace(/[^\d.]/g, "")) || 0;
+  // Extract values for this college
+  const ranking = Number(college.rankingData?.rank_value) || 1000;
+  const tuition = parseFloat((college.tuitionFee || "0").replace(/[^\d.]/g, "")) || 0;
+  const roi = typeof college.roi === 'number' ? college.roi : (parseFloat(college.roi) || 5);
+  const budget = parseFloat((userBudget || "0").replace(/[^\d.]/g, "")) || 0;
 
-//   // Priority weights
-//   const priorityWeights = {
-//     ranking: priorities.includes("ranking") ? 2 : 1,
-//     budget: priorities.includes("budget") ? 2 : 1,
-//     roi: priorities.includes("roi") ? 2 : 1,
-//     tuition_fee: priorities.includes("tuition_fee") ? 2 : 1,
-//   };
-//   const totalWeight = priorityWeights.ranking + priorityWeights.budget + priorityWeights.roi + priorityWeights.tuition_fee;
+  // Priority weights
+  const priorityWeights = {
+    ranking: priorities.includes("ranking") ? 2 : 1,
+    budget: priorities.includes("budget") ? 2 : 1,
+    roi: priorities.includes("roi") ? 2 : 1,
+    tuition_fee: priorities.includes("tuition_fee") ? 2 : 1,
+  };
+  const totalWeight = priorityWeights.ranking + priorityWeights.budget + priorityWeights.roi + priorityWeights.tuition_fee;
 
-//   // Individual scores (normalized, 0-1)
-//   const rankingScore = norm(ranking, rankings, true) * priorityWeights.ranking;
-//   const budgetScore = norm(budget, tuitions, true) * priorityWeights.budget;
-//   const roiScore = norm(roi, rois, true) * priorityWeights.roi;
-//   const tuitionScore = norm(tuition, tuitions, true) * priorityWeights.tuition_fee;
+  // Individual scores (normalized, 0-1)
+  const rankingScore = norm(ranking, rankings, true) * priorityWeights.ranking;
+  const budgetScore = norm(budget, tuitions, true) * priorityWeights.budget;
+  const roiScore = norm(roi, rois, true) * priorityWeights.roi;
+  const tuitionScore = norm(tuition, tuitions, true) * priorityWeights.tuition_fee;
 
-//   // Final fit score (weighted average, 0-1)
-//   let fitScore = (rankingScore + budgetScore + roiScore + tuitionScore) / totalWeight;
+  // Final fit score (weighted average, 0-1)
+  let fitScore = (rankingScore + budgetScore + roiScore + tuitionScore) / totalWeight;
 
-//   // Add a small unique offset based on college id/name for uniqueness
-//   let hash = 0;
-//   for (let i = 0; i < college.name.length; i++) hash += college.name.charCodeAt(i);
-//   fitScore += (hash % 13) * 0.001;
+  // Add a small unique offset based on college id/name for uniqueness
+  let hash = 0;
+  for (let i = 0; i < college.name.length; i++) hash += college.name.charCodeAt(i);
+  fitScore += (hash % 13) * 0.001;
 
-//   // Clamp and convert to percentage
-//   fitScore = Math.max(0, Math.min(1, fitScore));
-//   return Math.round(fitScore * 100);
-// }
+  // Clamp and convert to percentage
+  fitScore = Math.max(0, Math.min(1, fitScore));
+  return Math.round(fitScore * 100);
+}
 
 function formatPriority(priority: string) {
   return priority.toLowerCase() === "roi"
@@ -300,9 +259,6 @@ export default function ResultsStep({
   onNext,
   onBack,
 }: ResultsStepProps) {
-  // Fixed: Define userSelectedPriorities directly from userProfile
-  const userSelectedPriorities = userProfile?.priorities || [];
-
   const [selectedCollegeForDetails, setSelectedCollegeForDetails] = useState<College | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [hoveredCollege, setHoveredCollege] = useState<string | null>(null)
@@ -931,56 +887,64 @@ export default function ResultsStep({
     if (!notes[collegeId]?.trim()) return;
     setNoteRephrasing(prev => ({ ...prev, [collegeId]: true }));
     setNoteRephraseError(prev => ({ ...prev, [collegeId]: '' }));
+    
     try {
       const college = orderedColleges.find(c => c.id === collegeId);
+      // Extract numeric values and percentages before sending to API
+      const originalNote = notes[collegeId];
+      const numericValues = originalNote.match(/\d+(\.\d+)?%?/g) || [];
+      
       const res = await fetch('/api/rephrase-usp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           note: notes[collegeId],
           college: college?.name || '',
-          program: college?.courseName || ''
+          program: college?.courseName || '',
+          preserveValues: numericValues // Pass the numeric values to preserve
         })
       });
+
       const data = await res.json();
       console.log('Rephrase USP response:', data);
+      
       if (data.usp && data.usp.trim()) {
+        // Ensure numeric values are preserved in the rephrased output
+        let rephrasedUsp = data.usp.trim();
+        numericValues.forEach(value => {
+          if (!rephrasedUsp.includes(value)) {
+            // If the value is missing, try to insert it appropriately
+            rephrasedUsp = rephrasedUsp.replace(
+              /\b(cost|rate|percentage|discount|fee|price|reduction|increase|decrease|saving|budget)\b/i, 
+              `$1 of ${value}`
+            );
+          }
+        });
+
         setSavedNotes(prev => {
           const updated = {
             ...prev,
-            [collegeId]: [...(prev[collegeId] || []), data.usp.trim()]
+            [collegeId]: [...(prev[collegeId] || []), rephrasedUsp]
           };
           persistUserCollegeData(orderedColleges, updated);
           return updated;
         });
       } else {
-        setNoteRephraseError(prev => ({ ...prev, [collegeId]: data.error || 'Failed to rephrase note. Please try again.' }));
+        setNoteRephraseError(prev => ({ 
+          ...prev, 
+          [collegeId]: data.error || 'Failed to rephrase note. Please try again.' 
+        }));
       }
     } catch (err) {
-      setNoteRephraseError(prev => ({ ...prev, [collegeId]: 'Network or server error. Please try again.' }));
+      setNoteRephraseError(prev => ({ 
+        ...prev, 
+        [collegeId]: 'Network or server error. Please try again.' 
+      }));
     } finally {
       setNoteRephrasing(prev => ({ ...prev, [collegeId]: false }));
       setNotes(prev => ({ ...prev, [collegeId]: '' }));
     }
   };
-
-  const ALL_PARAMS = [
-    "Ranking",
-    "Budget Compatibility",
-    "ROI",
-    "Tuition Fee",
-    "Living Cost",
-    "Scholarships",
-    "Location",
-    "Employability Rate",
-  ];
-
-  const fitScoreWeights = useMemo(
-    () => generateWeights(userSelectedPriorities, ALL_PARAMS),
-    [userSelectedPriorities]
-  );
-
-  const [showFitScoreInfo, setShowFitScoreInfo] = useState<string | null>(null);
 
   return (
     <TooltipProvider>
@@ -1070,15 +1034,6 @@ export default function ResultsStep({
                   const details = getCollegeDetails(college)
                   const isHovered = hoveredCollege === college.id
 
-                  // Prepare a normalized college object for scoring
-                  const normalizedCollege: Record<string, number> = {};
-                  ALL_PARAMS.forEach(param => {
-                    // If your college object uses different keys, map accordingly here
-                    normalizedCollege[param] = college[param] ?? 0;
-                  });
-
-                  const fitScore = calculateFitScore(normalizedCollege, fitScoreWeights);
-
                   return (
                     <Draggable key={college.id} draggableId={college.id} index={index}>
                       {(draggableProvided, snapshot) => (
@@ -1092,206 +1047,210 @@ export default function ResultsStep({
                               : "border-gray-200 bg-white/80 hover:border-gray-300"
                           } backdrop-blur-sm rounded-2xl relative overflow-hidden`}
                         >
-                          {/* 1. Add ranking badge at the top left of each card */}
-                          {/* Fix the ranking badge at the top left of each card for better visibility */}
-                          {/* Remove the floating badge from the top left of the card */}
-                          <div className="flex flex-col lg:flex-row gap-2 sm:gap-3 w-full">
-                            {/* Left/Main Section */}
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-start gap-2 mb-1">
-                                <div className="flex items-center gap-1">
-                                  <div
-                                    className={`w-12 h-12 bg-gradient-to-br ${college.color} rounded-xl flex items-center justify-center text-white font-bold text-base shadow-lg`}
-                                  >
-                                    {college.name.charAt(0)}
+                          {/* Priority Bar */}
+                          <div
+                            className="w-full -mx-3 -mt-3 mb-3 bg-gradient-to-r from-yellow-100 via-yellow-50 to-yellow-100 border-b border-yellow-300 flex items-center justify-center"
+                            style={{
+                              borderTopLeftRadius: '0.9rem',
+                              borderTopRightRadius: '0.9rem',
+                              fontWeight: 600,
+                              fontSize: '0.95rem',
+                              color: '#8B5C00',
+                              letterSpacing: '0.03em',
+                              padding: '0.6rem',
+                              boxShadow: '0 1px 2px rgba(234, 179, 8, 0.1)'
+                            }}
+                          >
+                            {`${index + 1}${index === 0 ? 'st' : index === 1 ? 'nd' : index === 2 ? 'rd' : 'th'} College`}
+                          </div>
+                          {/* Left/Main Section */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start gap-2 mb-1">
+                              <div className="flex items-center gap-1">
+                                <div
+                                  className={`w-12 h-12 bg-gradient-to-br ${college.color} rounded-xl flex items-center justify-center text-white font-bold text-base shadow-lg`}
+                                >
+                                  {college.name.charAt(0)}
+                                </div>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex flex-wrap items-center gap-2 mb-0.5">
+                                  <h3 className="text-lg font-bold text-gray-900 leading-tight mb-0.5 truncate flex items-center gap-2">
+                                    {college.name}
+                                    {intendedMajor && (
+                                      <span className="italic text-sm text-gray-500 ml-2">{intendedMajor}</span>
+                                    )}
+                                  </h3>
+                                  <div className="text-gray-600 flex items-center gap-1 text-xs mb-0.5">
+                                    <MapPin />
+                                    <span className="text-sm text-gray-600">
+                                      {college.city && college.country 
+                                        ? `${college.city} - ${college.country}`.replace(/(UK|USA|Canada|France)(\s*-\s*\1|\s*,\s*\1)*$/g, '$1')
+                                        : college.location || ''
+                                      }
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-wrap items-center gap-1 mb-0.5">
+                                    <div className="flex items-center gap-1 bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full text-xs font-medium">
+                                      <Star className="w-3 h-3 mr-1 align-middle" />
+                                      {college.rankingData && college.rankingData.rank_value !== "N/A"
+                                        ? `Rank #${college.rankingData.rank_value} (${college.rankingData.rank_provider_name})`
+                                        : "N/A"}
+                                    </div>
+                                    <div className="flex items-center gap-1 bg-green-100 text-green-800 px-2 py-0.5 rounded-full text-xs font-medium">
+                                      {(() => {
+                                        let fee = college.tuitionFee;
+                                        if (isTuitionFeeInvalid(fee) && fallbackTuitionFees[college.id]) {
+                                          fee = fallbackTuitionFees[college.id];
+                                        }
+                                        if (!fee || isTuitionFeeInvalid(fee)) fee = "8.0";
+                                        const num = parseFloat(String(fee).replace(/[^\d.]/g, ""));
+                                        if (isNaN(num)) return "N/A";
+                                        const lakhs = (num / 100000).toFixed(2);
+                                        return `₹${lakhs}L`;
+                                      })()}
+                                    </div>
+                                  </div>
+                                  {/* Action buttons inline with name and badges */}
+                                  <div className="flex flex-row gap-2 items-center ml-2">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="hover:bg-blue-50 hover:border-blue-300 transition-all duration-300 bg-transparent flex items-center"
+                                      onClick={() => handleViewDetails(college)}
+                                    >
+                                      <Eye className="w-4 h-4 mr-1 align-middle" />
+                                      View Details
+                                    </Button>
+                                    <Button
+                                      onClick={() => onCollegeToggle(college.id)}
+                                      variant={isSelected ? "default" : "outline"}
+                                      size="sm"
+                                      className={`transition-all duration-300 flex items-center ${
+                                        isSelected
+                                          ? "bg-red-600 hover:bg-red-700 text-white"
+                                          : "hover:bg-red-50 hover:border-red-300"
+                                      }`}
+                                    >
+                                      <Heart className={`w-4 h-4 mr-1 align-middle ${college.liked ? "fill-current" : ""}`} />
+                                      {college.liked ? "Liked" : "Like"}
+                                    </Button>
+                                    <Button
+                                      onClick={() => handleComparisonToggle(college.id)}
+                                      variant={selectedForComparison.includes(college.id) ? "default" : "outline"}
+                                      size="sm"
+                                      className={`transition-all duration-300 flex items-center ${
+                                        selectedForComparison.includes(college.id)
+                                          ? "bg-green-600 hover:bg-green-700 text-white border-2 border-green-600"
+                                          : "hover:bg-green-50 hover:border-green-300 border-2 border-gray-300"
+                                      }`}
+                                      title="Select for comparison"
+                                    >
+                                      Compare
+                                    </Button>
+                                    <span className="flex items-center gap-1 px-3 py-1 rounded-full bg-blue-50 text-blue-800 font-bold text-base border border-blue-200 shadow-sm">
+                                      <span className="font-semibold mr-1">College Fit Score:</span>
+                                      {fitScoreLoading[college.id]
+                                        ? <span className="text-xs text-gray-400">Loading...</span>
+                                        : (fitScores[college.id] !== undefined ? `${fitScores[college.id]}%` : "N/A")}
+                                    </span>
+                                    <TooltipProvider>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button className="ml-2 p-1 rounded-full bg-blue-100 text-blue-700 text-xs" style={{ width: 22, height: 22, minWidth: 22, minHeight: 22 }}>
+                                            <Info className="w-3.5 h-3.5" />
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent className="max-w-xs text-xs text-gray-800 z-50" side="bottom" align="center">
+                                          <div className="font-bold mb-1">College Fit Score</div>
+                                          <div className="mb-1">This score is calculated based on:
+                                            <ul className="list-disc ml-4">
+                                              <li>Ranking</li>
+                                              <li>Budget</li>
+                                              <li>Break-even (ROI)</li>
+                                              <li>Tuition Fee</li>
+                                              <li><span className="font-semibold text-blue-700">Your selected priorities (weighted most)</span></li>
+                                            </ul>
+                                          </div>
+                                          <div className="mb-1">Key Metrics for this college:
+                                            <ul className="list-disc ml-4">
+                                              <li>Ranking: {college.rankingData && college.rankingData.rank_value !== "N/A"
+                                                ? `Rank #${college.rankingData.rank_value} (${college.rankingData.rank_provider_name})`
+                                                : "N/A"}</li>
+                                              <li>Tuition Fee: {formatTuitionFeeLakh(college.tuitionFee)}</li>
+                                              <li>Break-even: {(() => {
+                                                let roi = roiData[college.id];
+                                                if (typeof roi !== 'number' || isNaN(roi) || roi > 6) roi = 6;
+                                                return roi ? `${roi} years` : 'N/A';
+                                              })()}</li>
+                                            </ul>
+                                          </div>
+                                          <div className="text-gray-500">Your priorities are weighted more heavily in this score.</div>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
                                   </div>
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex flex-wrap items-center gap-2 mb-0.5">
-                                    <h3 className="text-lg font-bold text-gray-900 leading-tight mb-0.5 truncate flex items-center gap-2">
-                                      {college.name}
-                                      {intendedMajor && (
-                                        <span className="italic text-sm text-gray-500 ml-2">{intendedMajor}</span>
-                                      )}
-                                    </h3>
-                                    {/* Rank badge */}
-                                    <span className="ml-2 px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 text-xs font-semibold border border-yellow-300 align-middle">
-                                      {index + 1}{index === 0 ? 'st' : index === 1 ? 'nd' : index === 2 ? 'rd' : 'th'} College
-                                    </span>
-                                    <p className="text-gray-600 flex items-center gap-1 text-xs mb-0.5">
-                                      <MapPin className="w-4 h-4 align-middle" />
-                                      {[
-                                        college.city,
-                                        college.state,
-                                        college.country
-                                      ]
-                                        .filter(
-                                          (part) => part && typeof part === 'string' && part.trim() && part.trim().toLowerCase() !== 'not_available'
-                                        )
-                                        .join(', ')}
-                                    </p>
-                                    <div className="flex flex-wrap items-center gap-1 mb-0.5">
-                                      <div className="flex items-center gap-1 bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full text-xs font-medium">
-                                        <Star className="w-3 h-3 mr-1 align-middle" />
-                                        {college.rankingData && college.rankingData.rank_value !== "N/A"
-                                          ? `Rank #${college.rankingData.rank_value} (${college.rankingData.rank_provider_name})`
-                                          : "N/A"}
-                                      </div>
-                                      <div className="flex items-center gap-1 bg-green-100 text-green-800 px-2 py-0.5 rounded-full text-xs font-medium">
+                                {/* USPs Section */}
+                                <div className="mt-2 flex flex-col gap-0.5">
+                                  <div className="mt-0 mb-0.5">
+                                    {uspsLoading[college.id] ? (
+                                      <div className="text-gray-400 text-xs italic">Loading USPs...</div>
+                                    ) : (
+                                      <div className="flex flex-col gap-3 bg-white/80 rounded-xl p-4 shadow-sm border border-gray-100">
                                         {(() => {
-                                          let fee = college.tuitionFee;
-                                          if (isTuitionFeeInvalid(fee) && fallbackTuitionFees[college.id]) {
-                                            fee = fallbackTuitionFees[college.id];
+                                          const originalUspLines = usps[college.id] || "";
+                                          const uspLines = originalUspLines
+                                            .split(/\n|\r/)
+                                            .map(line => line.trim())
+                                            .filter(line => line.startsWith('-'))
+                                            .map(line => line.replace(/^[-•]\s*/, ''))
+                                            .slice(0, 4);
+                                          if (uspLines.length === 0) {
+                                            return <div className="text-gray-500 text-sm">No USP data available for this college.</div>;
                                           }
-                                          if (!fee || isTuitionFeeInvalid(fee)) fee = "8.0";
-                                          const num = parseFloat(String(fee).replace(/[^\d.]/g, ""));
-                                          if (isNaN(num)) return "N/A";
-                                          const lakhs = (num / 100000).toFixed(2);
-                                          return `₹${lakhs}L`;
-                                        })()}
-                                      </div>
-                                    </div>
-                                    {/* Action buttons inline with name and badges */}
-                                    <div className="flex flex-row gap-2 items-center ml-2">
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="hover:bg-blue-50 hover:border-blue-300 transition-all duration-300 bg-transparent flex items-center"
-                                        onClick={() => handleViewDetails(college)}
-                                      >
-                                        <Eye className="w-4 h-4 mr-1 align-middle" />
-                                        View Details
-                                      </Button>
-                                      <Button
-                                        onClick={() => onCollegeToggle(college.id)}
-                                        variant={isSelected ? "default" : "outline"}
-                                        size="sm"
-                                        className={`transition-all duration-300 flex items-center ${
-                                          isSelected
-                                            ? "bg-red-600 hover:bg-red-700 text-white"
-                                            : "hover:bg-red-50 hover:border-red-300"
-                                        }`}
-                                      >
-                                        <Heart className={`w-4 h-4 mr-1 align-middle ${college.liked ? "fill-current" : ""}`} />
-                                        {college.liked ? "Liked" : "Like"}
-                                      </Button>
-                                      <Button
-                                        onClick={() => handleComparisonToggle(college.id)}
-                                        variant={selectedForComparison.includes(college.id) ? "default" : "outline"}
-                                        size="sm"
-                                        className={`transition-all duration-300 flex items-center ${
-                                          selectedForComparison.includes(college.id)
-                                            ? "bg-green-600 hover:bg-green-700 text-white border-2 border-green-600"
-                                            : "hover:bg-green-50 hover:border-green-300 border-2 border-gray-300"
-                                        }`}
-                                        title="Select for comparison"
-                                      >
-                                        Compare
-                                      </Button>
-                                      <span className="flex items-center gap-1 px-3 py-1 rounded-full bg-blue-50 text-blue-800 font-bold text-base border border-blue-200 shadow-sm">
-                                        <span className="font-semibold mr-1">College Fit Score:</span>
-                                        {fitScoreLoading[college.id]
-                                          ? <span className="text-xs text-gray-400">Loading...</span>
-                                          : (fitScores[college.id] !== undefined ? `${fitScores[college.id]}%` : "N/A")}
-                                      </span>
-                                      <TooltipProvider>
-                                        <Tooltip>
-                                          <TooltipTrigger asChild>
-                                            <Button className="ml-2 p-1 rounded-full bg-blue-100 text-blue-700 text-xs" style={{ width: 22, height: 22, minWidth: 22, minHeight: 22 }}>
-                                              <Info className="w-3.5 h-3.5" />
-                                            </Button>
-                                          </TooltipTrigger>
-                                          <TooltipContent className="max-w-xs text-xs text-gray-800 z-50" side="bottom" align="center">
-                                            <div className="font-bold mb-1">College Fit Score</div>
-                                            <div className="mb-1">This score is calculated based on:
-                                              <ul className="list-disc ml-4">
-                                                <li>Ranking</li>
-                                                <li>Budget</li>
-                                                <li>Break-even (ROI)</li>
-                                                <li>Tuition Fee</li>
-                                                <li><span className="font-semibold text-blue-700">Your selected priorities (weighted most)</span></li>
-                                              </ul>
-                                            </div>
-                                            <div className="mb-1">Key Metrics for this college:
-                                              <ul className="list-disc ml-4">
-                                                <li>Ranking: {college.rankingData && college.rankingData.rank_value !== "N/A"
-                                                  ? `Rank #${college.rankingData.rank_value} (${college.rankingData.rank_provider_name})`
-                                                  : "N/A"}</li>
-                                                <li>Tuition Fee: {formatTuitionFeeLakh(college.tuitionFee)}</li>
-                                                <li>Break-even: {(() => {
-                                                  let roi = roiData[college.id];
-                                                  if (typeof roi !== 'number' || isNaN(roi) || roi > 6) roi = 6;
-                                                  return roi ? `${roi} years` : 'N/A';
-                                                })()}</li>
-                                              </ul>
-                                            </div>
-                                            <div className="text-gray-500">Your priorities are weighted more heavily in this score.</div>
-                                          </TooltipContent>
-                                        </Tooltip>
-                                      </TooltipProvider>
-                                    </div>
-                                  </div>
-                                  {/* USPs Section */}
-                                  <div className="mt-2 flex flex-col gap-0.5">
-                                    <div className="mt-0 mb-0.5">
-                                      {uspsLoading[college.id] ? (
-                                        <div className="text-gray-400 text-xs italic">Loading USPs...</div>
-                                      ) : (
-                                        <div className="flex flex-col gap-3 bg-white/80 rounded-xl p-4 shadow-sm border border-gray-100">
-                                          {(() => {
-                                            const originalUspLines = usps[college.id] || "";
-                                            const uspLines = originalUspLines
-                                              .split(/\n|\r/)
-                                              .map(line => line.trim())
-                                              .filter(line => line.startsWith('-'))
-                                              .map(line => line.replace(/^[-•]\s*/, ''))
-                                              .slice(0, 4);
-                                            if (uspLines.length === 0) {
-                                              return <div className="text-gray-500 text-sm">No USP data available for this college.</div>;
-                                            }
-                                            return uspLines.map((line, i) => (
-                                              <div key={i} className="flex items-start text-base text-gray-900 font-medium">
-                                                <TickIcon />
-                                                <span>{line}</span>
-                                              </div>
-                                            ));
-                                          })()}
-                                          {(savedNotes[college.id] || []).map((note, i) => (
-                                            <div key={i} className="flex items-start text-base text-gray-900 font-medium group">
+                                          return uspLines.map((line, i) => (
+                                            <div key={i} className="flex items-start text-base text-gray-900 font-medium">
                                               <TickIcon />
-                                              <span className="flex-1">{note}</span>
-                                              <button
-                                                className="ml-2 text-xs text-red-500 hover:text-red-700 opacity-70 group-hover:opacity-100 transition"
-                                                title="Remove USP"
-                                                onClick={() => {
-                                                  setSavedNotes(prev => {
-                                                    const updated = {
-                                                      ...prev,
-                                                      [college.id]: prev[college.id].filter((_, idx) => idx !== i)
-                                                    };
-                                                    persistUserCollegeData(orderedColleges, updated);
-                                                    return updated;
-                                                  });
-                                                }}
-                                                aria-label="Remove USP"
-                                                type="button"
-                                              >
-                                                ✖️
-                                              </button>
+                                              <span>{String(line).replace(/[\s\u00A0]*[-–—][\s\u00A0]*/g, ', ')}</span>
                                             </div>
-                                          ))}
-                                          {noteRephrasing[college.id] && (
-                                            <div className="flex items-center gap-2 text-blue-600 text-sm font-medium">
-                                              <svg className="animate-spin h-4 w-4 text-blue-600" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>
-                                              Rephrasing note...
-                                            </div>
-                                          )}
-                                          {noteRephraseError[college.id] && (
-                                            <div className="text-red-600 text-xs font-medium mt-1">{noteRephraseError[college.id]}</div>
-                                          )}
-                                        </div>
-                                      )}
-                                    </div>
+                                          ));
+                                        })()}
+                                        {(savedNotes[college.id] || []).map((note, i) => (
+                                          <div key={i} className="flex items-start text-base text-gray-900 font-medium group">
+                                            <TickIcon />
+                                            <span className="flex-1">{note}</span>
+                                            <button
+                                              className="ml-2 text-xs text-red-500 hover:text-red-700 opacity-70 group-hover:opacity-100 transition"
+                                              title="Remove USP"
+                                              onClick={() => {
+                                                setSavedNotes(prev => {
+                                                  const updated = {
+                                                    ...prev,
+                                                    [college.id]: prev[college.id].filter((_, idx) => idx !== i)
+                                                  };
+                                                  persistUserCollegeData(orderedColleges, updated);
+                                                  return updated;
+                                                });
+                                              }}
+                                              aria-label="Remove USP"
+                                              type="button"
+                                            >
+                                              ✖️
+                                            </button>
+                                          </div>
+                                        ))}
+                                        {noteRephrasing[college.id] && (
+                                          <div className="flex items-center gap-2 text-blue-600 text-sm font-medium">
+                                            <svg className="animate-spin h-4 w-4 text-blue-600" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>
+                                            Rephrasing note...
+                                          </div>
+                                        )}
+                                        {noteRephraseError[college.id] && (
+                                          <div className="text-red-600 text-xs font-medium mt-1">{noteRephraseError[college.id]}</div>
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                               </div>
@@ -1514,45 +1473,4 @@ export default function ResultsStep({
       </motion.div>
     </TooltipProvider>
   )
-}
-
-const ALL_PARAMS = [
-  "Ranking",
-  "Budget Compatibility",
-  "ROI",
-  "Tuition Fee",
-  "Living Cost",
-  "Scholarships",
-  "Location",
-  "Employability Rate",
-];
-
-function generateWeights(preferred: string[], allParams: string[]): Record<string, number> {
-  const weights: Record<string, number> = {};
-  const nonPreferred = allParams.filter(p => !preferred.includes(p));
-
-  const priorityWeightTotal = 0.60;
-  const otherWeightTotal = 0.40;
-
-  const priorityWeight = preferred.length > 0 ? priorityWeightTotal / preferred.length : 0;
-  const otherWeight = nonPreferred.length > 0 ? otherWeightTotal / nonPreferred.length : 0;
-
-  allParams.forEach(param => {
-    if (preferred.includes(param)) {
-      weights[param] = priorityWeight;
-    } else {
-      weights[param] = otherWeight;
-    }
-  });
-
-  return weights;
-}
-
-function calculateFitScore(college: Record<string, number>, weights: Record<string, number>) {
-  let score = 0;
-  for (const param in weights) {
-    const value = college[param] || 0;
-    score += value * weights[param];
-  }
-  return Math.min(score * 100, 95);  // score out of 100, capped at 95%
 }

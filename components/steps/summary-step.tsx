@@ -862,14 +862,9 @@ export default function SummaryStep({
     // Attach correct USPs to each liked college for the PDF
     const likedCollegesWithUSPs = likedColleges.map((college: any) => ({
       ...college,
-      usps: (typeof usps === 'object' && usps[college.id])
-        ? usps[college.id]
-          .split(/\n|\r/)
-          .map((line: string) => line.trim())
-          .filter((line: string) => line.startsWith('-'))
-          .map((line: string) => line.replace(/^[-•]\s*/, ''))
-          .slice(0, 4)
-        : (college.usps || [])
+      usps: (Array.isArray(college.usps) ? college.usps : []).map(usp => 
+        String(usp).replace(/[\s\u00A0]*[-–—][\s\u00A0]*/g, ', ')
+      )
     }));
     const meetingDate = new Date().toLocaleDateString();
     const counselor = counselorInfo || { name: "Ujjbal Sharma", title: "Leap Scholar Counselor", phone: "6364467022" };

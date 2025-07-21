@@ -360,7 +360,9 @@ const LeapStyleSummaryPDF: React.FC<LeapStyleSummaryPDFProps> = (props) => {
                     <div className="text-sm font-bold text-gray-500 mb-2 tracking-widest uppercase">Key Highlights</div>
                     <ul className="space-y-3 list-disc list-inside">
                       {(college.usps || []).map((usp, idx) => (
-                        <li key={idx} className="text-lg text-gray-700 leading-relaxed font-medium">{usp}</li>
+                        <li key={idx} className="text-lg text-gray-700 leading-relaxed font-medium">
+                          {String(usp).replace(/[\s\u00A0]*[-–—][\s\u00A0]*/g, ', ')}
+                        </li>
                       ))}
                     </ul>
                   </div>
