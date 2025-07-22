@@ -1,5 +1,21 @@
 import React from "react";
 import { Card } from "@/components/ui/card";
+// Add a simple tooltip component
+const InfoTooltip = ({ label }: { label: string }) => (
+  <span className="ml-1 cursor-pointer group relative inline-block align-middle">
+    <span className="inline-block w-4 h-4 bg-blue-100 text-blue-700 rounded-full text-xs font-bold flex items-center justify-center">i</span>
+    <span className="absolute left-1/2 -translate-x-1/2 mt-2 z-10 hidden group-hover:block bg-white border border-gray-300 text-xs text-gray-700 rounded px-2 py-1 shadow-lg whitespace-nowrap min-w-max">
+      {label}
+    </span>
+  </span>
+);
+
+function formatLakhs(fee?: string) {
+  if (!fee) return "N/A";
+  const num = parseFloat(fee.replace(/[^\d.]/g, ""));
+  if (isNaN(num)) return fee;
+  return `₹${(num / 100000).toFixed(1)}L`;
+}
 
 interface College {
   id: string;
@@ -32,21 +48,26 @@ export default function SummaryCollegeCards({ colleges }: SummaryCollegeCardsPro
           </div>
           <div className="mb-2">
             <span className="font-semibold">Tuition Fee: </span>
-            {college.tuitionFee || "N/A"}
+            {formatLakhs(college.tuitionFee)}
           </div>
-          <div className="mb-2">
+          <div className="mb-2 flex items-center">
             <span className="font-semibold">Avg Package: </span>
-            {college.avgPackage || "N/A"}
+            <span className="ml-1">{college.avgPackage || "N/A"}</span>
+            <InfoTooltip label="Source: Glassdoor (estimate)" />
           </div>
-          <div className="mb-2">
+          <div className="mb-2 flex items-center">
             <span className="font-semibold">Break-even: </span>
-            {college.breakEven || "N/A"}
+            <span className="ml-1">{college.breakEven || "N/A"}</span>
+            <InfoTooltip label="Source: Glassdoor (estimate)" />
           </div>
-          <div>
+          <div className="flex items-center">
             <span className="font-semibold">Ranking: </span>
-            {college.rankingData && college.rankingData.rank_value !== "N/A"
-              ? `Rank #${college.rankingData.rank_value} (${college.rankingData.rank_provider_name})`
-              : "N/A"}
+            <span className="ml-1">
+              {college.rankingData && college.rankingData.rank_value !== "N/A"
+                ? `Rank #${college.rankingData.rank_value} (${college.rankingData.rank_provider_name})`
+                : "N/A"}
+            </span>
+            <InfoTooltip label="Source: QS World University Rankings 2024" />
           </div>
         </Card>
       ))}

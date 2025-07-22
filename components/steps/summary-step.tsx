@@ -3,14 +3,14 @@
 import type React from "react"
 
 import { motion } from "framer-motion"
-import { ArrowLeft, Download, TrendingUp, DollarSign, Users, Heart } from "lucide-react"
+import { ArrowLeft, Download, TrendingUp, DollarSign, Users, Heart, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ChartTooltip } from "@/components/ui/chart"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Line, ComposedChart, Legend } from "recharts"
-import { TooltipProvider } from "@/components/ui/tooltip"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Step, College } from "@/types/college"
 
 import { useState, useRef, useEffect } from "react"
@@ -257,6 +257,8 @@ interface SummaryStepProps {
   colleges: College[]
   onNext: (step: Step) => void
   onBack: () => void
+  selectedNextStep?: string
+  nextStepNotes?: string[]
 }
 
 // --- Chart Card Wrapper ---
@@ -275,6 +277,107 @@ function formatPriority(priority: string) {
     : priority.charAt(0).toUpperCase() + priority.slice(1).replace(/_/g, " ");
 }
 
+// NEXT STEPS CONSTANT
+const steps = [
+  "Book a free counseling call",
+  "Ask for university-specific scholarships",
+  "Get a full ROI & break-even report",
+  "Apply for visa help",
+  "Shortlist 3 best colleges",
+  "Connect with students studying abroad",
+]
+
+// =========================
+// ✅ NEXT STEPS Component
+// =========================
+
+function NextSteps() {
+  const [isOpen, setIsOpen] = useState(false)
+  const [selectedStep, setSelectedStep] = useState<string | null>(null)
+
+  return (
+    <div className="fixed left-4 bottom-4 lg:top-1/2 lg:-translate-y-1/2 z-50">
+      <div className="relative inline-block">
+        <Button
+          onClick={() => setIsOpen(!isOpen)}
+          className="bg-gray-900 text-white hover:bg-gray-800 px-5 py-2.5 text-sm font-medium rounded-lg shadow-md flex items-center gap-2"
+        >
+          Next Steps
+          <ChevronDown
+            className={`transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+            size={16}
+          />
+        </Button>
+
+        {isOpen && (
+          <div className="absolute mt-2 w-64 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden z-50">
+            <div className="py-2">
+              {steps.map((step) => (
+                <div
+                  key={step}
+                  onClick={() => {
+                    setSelectedStep(step)
+                    setIsOpen(false)
+                  }}
+                  className={`px-4 py-2 text-sm cursor-pointer transition-colors ${
+                    selectedStep === step
+                      ? "bg-blue-100 text-blue-700 font-medium"
+                      : "text-gray-700 hover:bg-gray-50"
+                  }`}
+                >
+                  {step}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {selectedStep && (
+          <div className="mt-3 text-sm text-gray-600 max-w-xs">
+            <span className="font-semibold text-gray-800">Selected:</span> {selectedStep}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// Add a simple InfoTooltip component at the top
+const InfoTooltip = ({ label }: { label: string }) => (
+  <span className="ml-1 cursor-pointer group relative inline-block align-middle">
+    <span className="inline-block w-4 h-4 bg-blue-100 text-blue-700 rounded-full text-xs font-bold flex items-center justify-center">i</span>
+    <span className="absolute left-1/2 -translate-x-1/2 mt-2 z-10 hidden group-hover:block bg-white border border-gray-300 text-xs text-gray-700 rounded px-2 py-1 shadow-lg whitespace-nowrap min-w-max">
+      {label}
+    </span>
+  </span>
+);
+function formatLakhs(fee?: string) {
+  if (!fee) return "N/A";
+  const num = parseFloat(fee.replace(/[^\d.]/g, ""));
+  if (isNaN(num)) return fee;
+  return `₹${(num / 100000).toFixed(1)}L`;
+}
+
+// Helper to format salary/package as LPA
+function formatLPA(value: string): string {
+  if (!value) return "N/A";
+  // Remove currency symbols and commas
+  let num = value.replace(/[^\d.]/g, "");
+  if (!num) return "N/A";
+  let n = parseFloat(num);
+  if (isNaN(n)) return value;
+  // If value is in GBP or USD, convert to INR (assume GBP for now, 1 GBP ≈ 105 INR)
+  if (value.includes("£")) n = n * 105;
+  if (value.includes("$") || value.toLowerCase().includes("usd")) n = n * 83;
+  // If value already contains 'LPA', just return as is
+  if (value.toUpperCase().includes("LPA")) return value.replace(/LPA+/gi, "LPA");
+  // If value is already in lakhs (e.g., 26.3L), replace 'L' with 'LPA'
+  if (value.toLowerCase().includes("l")) return value.replace(/l/gi, "LPA");
+  // Convert to lakhs
+  const lpa = (n / 100000).toFixed(2);
+  return `₹${lpa} LPA`;
+}
+
 export default function SummaryStep({
   pageVariants,
   pageTransition,
@@ -282,6 +385,8 @@ export default function SummaryStep({
   colleges,
   onNext,
   onBack,
+  selectedNextStep,
+  nextStepNotes,
 }: SummaryStepProps) {
   // Always use the name from the sheet if available
   const [studentName, setStudentName] = useState(formData.sheetName || formData.name);
@@ -366,9 +471,12 @@ export default function SummaryStep({
       for (const college of likedColleges) {
         results[college.id] = await fetchBreakEvenWithSource(college);
       }
-      setBreakEvenSources(results);
+      // Only update state if results are different
+      const isDifferent = JSON.stringify(results) !== JSON.stringify(breakEvenSources);
+      if (isDifferent) setBreakEvenSources(results);
     }
     if (likedColleges.length > 0) fetchAllBreakEvens();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [likedColleges, collegeRoiData]);
 
   // Generate data based on LIKED colleges only
@@ -746,13 +854,17 @@ export default function SummaryStep({
       })
     : fallbackROIData
   );
-  const safeROIData = robustROIData.filter(d => typeof d.roi === 'number' && d.roi > 0);
-  if (safeROIData.length === 0 && likedColleges.length > 0) {
-    // If all data is missing, show fallback bars for each liked college
-    likedColleges.forEach((college, i) => {
-      const fallback = fallbackROIData[i % fallbackROIData.length];
-      safeROIData.push({ name: college.name, roi: fallback ? fallback.roi : 3.2 + i * 0.3 });
-    });
+  let safeROIData = robustROIData.filter(d => typeof d.roi === 'number' && d.roi > 0);
+  if (safeROIData.length === 0) {
+    // If all data is missing, show fallback bars for each liked college or fallbackROIData
+    if (likedColleges.length > 0) {
+      safeROIData = likedColleges.map((college, i) => {
+        const fallback = fallbackROIData[i % fallbackROIData.length];
+        return { name: college.name, roi: fallback ? fallback.roi : 3.2 + i * 0.3 };
+      });
+    } else {
+      safeROIData = [...fallbackROIData];
+    }
   }
 
   // Employment Data for the chart
@@ -766,12 +878,16 @@ export default function SummaryStep({
       })
     : fallbackEmploymentData
   );
-  const safeEmploymentData = robustEmploymentData.length > 0 ? robustEmploymentData : fallbackEmploymentData;
-  if (safeEmploymentData.length === 0 && likedColleges.length > 0) {
-    likedColleges.forEach((college, i) => {
-      const fallback = fallbackEmploymentData[i % fallbackEmploymentData.length];
-      safeEmploymentData.push({ university: college.name, rate: fallback.rate, salary: fallback.salary });
-    });
+  let safeEmploymentData = robustEmploymentData.length > 0 ? robustEmploymentData : fallbackEmploymentData;
+  if (safeEmploymentData.length === 0) {
+    if (likedColleges.length > 0) {
+      safeEmploymentData = likedColleges.map((college, i) => {
+        const fallback = fallbackEmploymentData[i % fallbackEmploymentData.length];
+        return { university: college.name, rate: fallback.rate, salary: fallback.salary };
+      });
+    } else {
+      safeEmploymentData = [...fallbackEmploymentData];
+    }
   }
   const employmentData = (likedColleges.length > 0 ? generateEmploymentData() : fallbackEmploymentData)
     .filter(d => d && typeof d.rate === 'number' && d.rate > 0 && typeof d.salary === 'number' && d.salary > 0);
@@ -940,36 +1056,8 @@ export default function SummaryStep({
     });
   };
 
-  // Helper to format salary/package as LPA
-  function formatLPA(value: string): string {
-    if (!value) return "N/A";
-    // Remove currency symbols and commas
-    let num = value.replace(/[^\d.]/g, "");
-    if (!num) return "N/A";
-    let n = parseFloat(num);
-    if (isNaN(n)) return value;
-    // If value is in GBP or USD, convert to INR (assume GBP for now, 1 GBP ≈ 105 INR)
-    if (value.includes("£")) n = n * 105;
-    if (value.includes("$") || value.toLowerCase().includes("usd")) n = n * 83;
-    // If value is already in lakhs (e.g., 26.3L), just append LPA
-    if (value.toLowerCase().includes("l")) return value.replace(/l/gi, "LPA");
-    // Convert to lakhs
-    const lpa = (n / 100000).toFixed(2);
-    return `${lpa} LPA`;
-  }
-
-  // PDF download handler
   const handleDownloadPDF = async () => {
-    if (summaryRef.current) {
-      const html2pdf = (await import('html2pdf.js')).default;
-      html2pdf(summaryRef.current, {
-        margin: 0.5,
-        filename: 'summary.pdf',
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2 },
-        jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
-      });
-    }
+    await generatePDF(formData, colleges, summaryRef);
   };
 
   return (
@@ -978,7 +1066,7 @@ export default function SummaryStep({
       <div className="flex flex-col sm:flex-row items-center justify-between mb-8 gap-4 sm:gap-0 px-2 sm:px-0">
         <Button
           variant="ghost"
-          onClick={onBack}
+          onClick={() => { console.log('Back to Analysis clicked'); onBack(); }}
           className="hover:bg-white/50 transition-all duration-300 hover:scale-105"
         >
           <ArrowLeft className="w-4 h-4 mr-2" />
@@ -1011,7 +1099,7 @@ export default function SummaryStep({
         exit="out"
         variants={pageVariants}
         transition={pageTransition}
-        className="space-y-8 px-2 sm:px-0"
+        className="space-y-8 px-2 sm:px-0 pb-24"  // Added pb-24 for mobile spacing
         style={{ background: '#fff' }}
       >
         {/* Title Section */}
@@ -1064,53 +1152,65 @@ export default function SummaryStep({
                       <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-200">
                         <div>
                           <p className="text-xs text-gray-600 mb-1">Tuition Fee</p>
-                          <p className="font-semibold text-gray-900 text-sm">{details.tuitionFees && !details.tuitionFees.includes('₹') ? `₹${details.tuitionFees}` : details.tuitionFees}</p>
+                          <p className="font-semibold text-gray-900 text-sm">{formatLakhs(details.tuitionFees)}</p>
                         </div>
                         <div>
                           <p className="text-xs text-gray-600 mb-1">Avg Package</p>
-                          <p className="font-semibold text-gray-900 text-sm">
-                            {formatLPA(avgPackageSources[college.id]?.value) || "N/A"}
-                            {avgPackageSources[college.id]?.sourceUrl && (
-                              <a
-                                href={avgPackageSources[college.id].sourceUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="ml-2 text-blue-600 underline text-xs font-normal"
-                              >
-                                {avgPackageSources[college.id].sourceLabel || "Source"}
-                              </a>
-                            )}
-                          </p>
+                          <span className="font-semibold text-gray-900 text-sm flex items-center">
+                            {(() => { const raw = avgPackageSources[college.id]?.value || college.avgPackage; console.log('DEBUG AvgPackage raw:', raw); return formatLPA(raw) || "N/A"; })()}
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="ml-1 cursor-pointer inline-block align-middle">
+                                  <span className="inline-block w-4 h-4 bg-blue-100 text-blue-700 rounded-full text-xs font-bold flex items-center justify-center">i</span>
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" align="center">
+                                {avgPackageSources[college.id]?.sourceLabel || "Source: Glassdoor (estimate)"}
+                              </TooltipContent>
+                            </Tooltip>
+                          </span>
                         </div>
                         <div>
                           <p className="text-xs text-gray-600 mb-1">Break-even</p>
-                          <p className="font-semibold text-green-600 text-sm">
+                          <span className="font-semibold text-green-600 text-sm flex items-center">
                             {roiLoading[college.id] ? (
                               "Loading..."
                             ) : (
                               <>
                                 {breakEvenSources[college.id]?.value || formatBreakEvenRange(collegeRoiData[college.id] || (3.2 + index * 0.3))}
-                                {breakEvenSources[college.id]?.sourceUrl && (
-                                  <a
-                                    href={breakEvenSources[college.id].sourceUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="ml-2 text-blue-600 underline text-xs font-normal"
-                                  >
-                                    {breakEvenSources[college.id].sourceLabel || "Source"}
-                                  </a>
-                                )}
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="ml-1 cursor-pointer inline-block align-middle">
+                                      <span className="inline-block w-4 h-4 bg-blue-100 text-blue-700 rounded-full text-xs font-bold flex items-center justify-center">i</span>
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" align="center">
+                                    {breakEvenSources[college.id]?.sourceLabel || "Source: Glassdoor (estimate)"}
+                                  </TooltipContent>
+                                </Tooltip>
                               </>
                             )}
-                          </p>
+                          </span>
                         </div>
                         <div>
                           <p className="text-xs text-gray-600 mb-1">Ranking</p>
-                          <p className="font-semibold text-gray-900 text-sm">
+                          <span className="font-semibold text-gray-900 text-sm flex items-center">
                             {college.rankingData && college.rankingData.rank_value !== "N/A"
-                              ? `Rank #${college.rankingData.rank_value} (${college.rankingData.rank_provider_name})`
+                              ? `Rank #${college.rankingData.rank_value}`
                               : "N/A"}
-                          </p>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="ml-1 cursor-pointer inline-block align-middle">
+                                  <span className="inline-block w-4 h-4 bg-blue-100 text-blue-700 rounded-full text-xs font-bold flex items-center justify-center">i</span>
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" align="center">
+                                {college.rankingData && college.rankingData.rank_provider_name !== "N/A"
+                                  ? `Source: ${college.rankingData.rank_provider_name}`
+                                  : "Source: QS World University Rankings 2024"}
+                              </TooltipContent>
+                            </Tooltip>
+                          </span>
                         </div>
                       </div>
 
@@ -1175,171 +1275,51 @@ export default function SummaryStep({
         </div>
 
         {/* Main Content Tabs */}
-        <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-1 bg-white/50 backdrop-blur-sm border-2">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-          </TabsList>
+        {/* Remove the TabsList and TabsTrigger for 'Overview' */}
 
-          {/* Overview Tab */}
-          <TabsContent value="overview" className="space-y-6">
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-              {/* ROI Analysis Chart - More Visual */}
-              {console.log("safeROIData", safeROIData)}
-              <ChartCard title="Break-even (ROI) Analysis">
-                <ResponsiveContainer width={"100%"} height={400}>
-                  <BarChart
-                    data={safeROIData.length > 0 ? safeROIData : [{ name: 'Test University', roi: 1.5 }]} // fallback for testing
-                    margin={{ top: 30, right: 30, left: 30, bottom: 60 }}
-                    barCategoryGap="20%" // Adjusted for better bar width
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e0e7ef" />
-                    <XAxis
-                      dataKey="name"
-                      tick={{ fontSize: 13, fill: "#444", fontWeight: 600 }}
-                      axisLine={false}
-                      tickLine={false}
-                      angle={-30}
-                      textAnchor="end"
-                      height={80}
-                    />
-                    <YAxis
-                      tick={{ fontSize: 13, fill: "#444", fontWeight: 600 }}
-                      axisLine={false}
-                      tickLine={false}
-                      // Force a minimum domain for visibility
-                      domain={[
-                        0,
-                        (() => {
-                          const maxRoi = Math.max(...safeROIData.map(d => d.roi), 0);
-                          return maxRoi < 2 ? 2 : Math.ceil(maxRoi + 0.5);
-                        })()
-                      ]}
-                      label={{
-                        value: "Break-even (Years)",
-                        angle: -90,
-                        position: "insideLeft",
-                        fontSize: 15,
-                        fill: "#4F46E5",
-                        fontWeight: 700
-                      }}
-                    />
-                    <ChartTooltip
-                      content={({ active, payload, label }) => {
-                        if (active && payload && payload.length) {
-                          return (
-                            <div className="bg-white p-4 border border-blue-200 rounded-xl shadow-xl">
-                              <p className="font-bold text-blue-800 text-lg mb-1">{label}</p>
-                              <p className="text-blue-600 font-semibold text-base">Break-even: {payload[0]?.value} years</p>
-                              <p className="text-xs text-gray-500 mt-1">Time to recover investment after graduation</p>
-                            </div>
-                          )
-                        }
-                        return null
-                      }}
-                    />
-                    <Bar
-                      dataKey="roi"
-                      fill="red" // Use a highly visible color for debugging
-                      radius={[12, 12, 0, 0]}
-                      isAnimationActive={true}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </ChartCard>
+        {/* Overview Tab */}
+        {/* Replace graphs with Next Steps feature */}
+        {/* <NextSteps /> removed from here */}
 
-              {/* Employment & Salary Chart - Improved */}
-              <ChartCard title="Employment Rate & Starting Salary">
-                <ResponsiveContainer width={"100%"} height={400}>
-                  <ComposedChart data={safeEmploymentData} margin={{ top: 30, right: 60, left: 30, bottom: 40 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e0e7ef" />
-                    <XAxis
-                      dataKey="university"
-                      tick={{ fontSize: 13, fill: "#444", fontWeight: 600 }}
-                      axisLine={false}
-                      tickLine={false}
-                      label={{ value: "University", position: "insideBottom", offset: -10, fontSize: 15, fill: "#333", fontWeight: 700 }}
-                    />
-                    <YAxis
-                      yAxisId="left"
-                      tick={{ fontSize: 12, fill: "#10B981", fontWeight: 700 }}
-                      axisLine={false}
-                      tickLine={false}
-                      domain={[0, 100]}
-                      label={{ value: "Employment Rate (%)", angle: -90, position: "insideLeft", fontSize: 15, fill: "#10B981", fontWeight: 700 }}
-                    />
-                    <YAxis
-                      yAxisId="right"
-                      orientation="right"
-                      tick={{ fontSize: 12, fill: "#F59E0B", fontWeight: 700 }}
-                      axisLine={false}
-                      tickLine={false}
-                      domain={[0, Math.max(...safeEmploymentData.map((e: { salary: number }) => typeof e.salary === 'number' ? e.salary : 0), 50000)]}
-                      label={{ value: "Starting Salary (USD)", angle: 90, position: "insideRight", fontSize: 15, fill: "#F59E0B", fontWeight: 700 }}
-                    />
-                    <ChartTooltip
-                      content={({ active, payload, label }) => {
-                        if (active && payload && payload.length) {
-                          const emp = payload.find((p) => p.dataKey === "rate")?.value;
-                          const sal = payload.find((p) => p.dataKey === "salary")?.value;
-                          const uni = label && label !== 'University' ? label : (payload[0]?.payload?.university || 'N/A');
-                          return (
-                            <div className="bg-white p-4 border border-green-200 rounded-xl shadow-xl">
-                              <p className="font-bold text-green-800 text-lg mb-1">{uni}</p>
-                              <p className="text-green-600 font-semibold text-base">
-                                Employment Rate: {emp && emp > 0 ? `${emp}%` : 'Data not available'}
-                              </p>
-                              <p className="text-orange-600 font-semibold text-base">
-                                Starting Salary: {sal && sal > 0 ? `$${sal.toLocaleString('en-US')}` : 'Data not available'}
-                              </p>
-                            </div>
-                          )
-                        }
-                        return null
-                      }}
-                    />
-                    <Line
-                      yAxisId="right"
-                      type="monotone"
-                      dataKey="salary"
-                      stroke="url(#salaryGradient)"
-                      strokeWidth={4}
-                      dot={{ fill: "#F59E0B", strokeWidth: 2, r: 7 }}
-                      activeDot={{ r: 10, stroke: "#F59E0B", strokeWidth: 3 }}
-                      name="Starting Salary (USD)"
-                      isAnimationActive={true}
-                      label={{ position: "top", fill: "#F59E0B", fontSize: 15, fontWeight: 700 }}
-                    />
-                    <Line
-                      yAxisId="left"
-                      type="monotone"
-                      dataKey="rate"
-                      stroke="url(#empGradient)"
-                      strokeWidth={4}
-                      dot={{ fill: "#10B981", strokeWidth: 2, r: 7 }}
-                      activeDot={{ r: 10, stroke: "#10B981", strokeWidth: 3 }}
-                      name="Employment Rate (%)"
-                      isAnimationActive={true}
-                      label={{ position: "top", fill: "#10B981", fontSize: 15, fontWeight: 700 }}
-                    />
-                    <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontWeight: 700, fontSize: 15 }} />
-                    <defs>
-                      <linearGradient id="salaryGradient" x1="0" y1="0" x2="1" y2="0">
-                        <stop offset="0%" stopColor="#F59E0B" stopOpacity={0.9} />
-                        <stop offset="100%" stopColor="#fde68a" stopOpacity={0.7} />
-                      </linearGradient>
-                      <linearGradient id="empGradient" x1="0" y1="0" x2="1" y2="0">
-                        <stop offset="0%" stopColor="#10B981" stopOpacity={0.9} />
-                        <stop offset="100%" stopColor="#6ee7b7" stopOpacity={0.7} />
-                      </linearGradient>
-                    </defs>
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </ChartCard>
-            </div>
-          </TabsContent>
-        </Tabs>
+        {/* Place NextSteps at the very bottom of the page */}
+        {/* <NextSteps /> */}
 
       </motion.div>
+      {selectedNextStep && (
+  <div className="w-full flex flex-col items-center mt-8">
+    <div className="bg-green-50 border border-green-200 rounded-2xl px-8 py-8 shadow text-green-900 text-center text-2xl font-semibold max-w-4xl w-full">
+      {(() => {
+        let actionItems = null;
+        switch(selectedNextStep) {
+          case "Document Collection – First Step to Apply*":
+            actionItems = (<><div className="font-bold mb-2">Thanks for today’s discussion!<br/>Let’s begin the process by collecting your documents.</div><ul className="list-disc pl-5 text-base mb-0 text-left"><li>I’ll review and confirm once received so we can proceed to the next step</li></ul></>); break;
+          case "Start Application – Shortlist is Final":
+            actionItems = (<><div className="font-bold mb-2">Congrats – your college list is finalized!<br/>Let’s now begin your applications.</div><ul className="list-disc pl-5 text-base mb-0 text-left"><li>We’ll begin applying after submission</li><li>You’ll start seeing application progress on your dashboard soon</li></ul></>); break;
+          case "Revised Shortlist Discussion – Before We Apply":
+            actionItems = (<><div className="font-bold mb-2">Thanks for the inputs in today’s session!<br/>I’ll revise your college list based on our discussion.</div><ul className="list-disc pl-5 text-base mb-0 text-left"><li>I’ll share the updated shortlist</li><li>Let’s reconnect to finalize and move ahead with the applications</li></ul></>); break;
+          case "Revised Shortlist + Document Collection":
+            actionItems = (<><div className="font-bold mb-2">We’ll be refining the college list while starting document collection in parallel.</div><ul className="list-disc pl-5 text-base mb-0 text-left"><li>I’ll share the revised shortlist before our next call</li></ul></>); break;
+          case "IELTS Preparation – Let’s Begin":
+            actionItems = (<><div className="font-bold mb-2">Since IELTS is critical for your target colleges, let’s get started right away.</div><ul className="list-disc pl-5 text-base mb-0 text-left"><li>Complete the diagnostic test</li><li>We’ll track your progress and adjust plans as needed</li></ul></>); break;
+          case "Financial Planning – Loan or Scholarship Support":
+            actionItems = (<><div className="font-bold mb-2">Let’s ensure your finances are sorted before we apply.</div><ul className="list-disc pl-5 text-base mb-0 text-left"><li>We aim to complete your loan pre-approval soon</li></ul></>); break;
+          default:
+            actionItems = null;
+        }
+        return (
+          <>
+            {actionItems}
+            {nextStepNotes && nextStepNotes.length > 0 && (
+              <ul className="list-disc pl-5 text-base mt-4 text-left">
+                <li>{nextStepNotes[nextStepNotes.length - 1]}</li>
+              </ul>
+            )}
+          </>
+        );
+      })()}
+    </div>
+  </div>
+)}
     </TooltipProvider>
   )
 }

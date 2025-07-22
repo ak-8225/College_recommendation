@@ -109,6 +109,8 @@ export default function CollegeFitApp() {
   const [showLoader, setShowLoader] = useState(false);
   const [userName, setUserName] = useState<string>("")
   const [userNameLoaded, setUserNameLoaded] = useState(false)
+  const [selectedNextStep, setSelectedNextStep] = useState<string>('');
+  const [nextStepNotes, setNextStepNotes] = useState<string[]>([]);
 
   const handleNext = (step: Step) => {
     if (step === 'results') {
@@ -158,8 +160,9 @@ export default function CollegeFitApp() {
   }
 
   const handleBack = () => {
-    const stepOrder: Step[] = ["welcome", "initial-form", "results", "comparison", "summary"]
-    const currentIndex = stepOrder.indexOf(currentStep)
+    console.log('handleBack called, currentStep:', currentStep);
+    const stepOrder: Step[] = ["welcome", "initial-form", "results", "comparison", "summary"];
+    const currentIndex = stepOrder.indexOf(currentStep);
     if (currentStep === "results") {
       setFormData({
         phoneNumber: "",
@@ -199,8 +202,13 @@ export default function CollegeFitApp() {
       setSelectedForComparison([])
       setColleges(mockColleges)
       setCurrentStep("initial-form")
+      console.log('Navigating to initial-form');
+    } else if (currentStep === "summary") {
+      setCurrentStep("comparison");
+      console.log('Navigating to comparison');
     } else if (currentIndex > 0) {
       setCurrentStep(stepOrder[currentIndex - 1])
+      console.log('Navigating to', stepOrder[currentIndex - 1]);
     }
   }
 
@@ -359,6 +367,10 @@ export default function CollegeFitApp() {
                   prevColleges.map((college) => (college.id === id ? { ...college, liked: !college.liked } : college)),
                 )
               }}
+              selectedNextStep={selectedNextStep}
+              onNextStepChange={setSelectedNextStep}
+              nextStepNotes={nextStepNotes}
+              onNotesChange={setNextStepNotes}
             />
           )}
 
@@ -379,19 +391,28 @@ export default function CollegeFitApp() {
                   prevColleges.map((college) => (college.id === id ? { ...college, liked: !college.liked } : college)),
                 )
               }}
+              selectedNextStep={selectedNextStep}
+              onNextStepChange={setSelectedNextStep}
+              nextStepNotes={nextStepNotes}
+              onNotesChange={setNextStepNotes}
             />
           )}
 
           {currentStep === "summary" && (
-            <SummaryStep
-              key="summary"
-              pageVariants={pageVariants}
-              pageTransition={pageTransition}
-              formData={formData}
-              colleges={colleges}
-              onNext={handleNext}
-              onBack={handleBack}
-            />
+            <>
+              <div className="mb-2 text-xs text-gray-500">DEBUG (parent): selectedNextStep = {selectedNextStep}</div>
+              <SummaryStep
+                key="summary"
+                pageVariants={pageVariants}
+                pageTransition={pageTransition}
+                formData={formData}
+                colleges={colleges}
+                onNext={handleNext}
+                onBack={handleBack}
+                selectedNextStep={selectedNextStep}
+                nextStepNotes={nextStepNotes}
+              />
+            </>
           )}
         </AnimatePresence>
       </div>

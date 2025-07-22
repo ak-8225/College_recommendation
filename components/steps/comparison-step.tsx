@@ -23,6 +23,8 @@ interface ComparisonStepProps {
   userPhone: string;
   intendedMajor?: string;
   courseName?: string;
+  selectedNextStep: string;
+  onNextStepChange: (step: string) => void;
 }
 
 export default function ComparisonStep({
@@ -38,6 +40,8 @@ export default function ComparisonStep({
   userPhone,
   intendedMajor,
   courseName,
+  selectedNextStep,
+  onNextStepChange,
 }: ComparisonStepProps) {
   const [selectedTheme, setSelectedTheme] = useState("all")
   // New: State to store fetched metrics for each college
@@ -52,6 +56,12 @@ export default function ComparisonStep({
   }
   // Add state for fallback tuition fees (to sync with ResultsStep logic)
   const [fallbackTuitionFees, setFallbackTuitionFees] = useState<{ [collegeId: string]: string }>({});
+  // Add the 
+  //  state at the top
+  const [notes, setNotes] = useState<string>('');
+  const [savedNotes, setSavedNotes] = useState<string[]>([]);
+  const [noteError, setNoteError] = useState<string>('');
+  const [saving, setSaving] = useState<boolean>(false);
 
   useEffect(() => {
     colleges.forEach((college) => {
@@ -1057,6 +1067,54 @@ export default function ComparisonStep({
     );
   }
 
+  // Next Steps options
+  const nextStepsOptions = [
+    "Document Collection – First Step to Apply*",
+    "Start Application – Shortlist is Final",
+    "Revised Shortlist Discussion – Before We Apply",
+    "Revised Shortlist + Document Collection",
+    "IELTS Preparation – Let’s Begin",
+    "Financial Planning – Loan or Scholarship Support"
+  ];
+
+  // Handler for saving a note
+  const handleSaveNote = async () => {
+    if (!notes.trim()) {
+      setNoteError('Note cannot be empty.');
+      return;
+    }
+    if (!selectedNextStep) {
+      setNoteError('Please select a Next Step before saving a note.');
+      return;
+    }
+    setSaving(true);
+    setNoteError('');
+    try {
+      // Call the rephrase API with both note and selectedNextStep as context
+      const res = await fetch('/api/rephrase-usp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note: notes.trim(), college: selectedNextStep })
+      });
+      const data = await res.json();
+      if (data.usp && data.usp.trim()) {
+        setSavedNotes(prev => [...prev, data.usp.trim()]);
+        setNotes('');
+        setNoteError('');
+      } else {
+        setNoteError(data.error || 'Failed to rephrase note. Please try again.');
+      }
+    } catch (err) {
+      setNoteError('Network or server error. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+  // Handler for removing a note
+  const handleRemoveNote = (idx: number) => {
+    setSavedNotes(prev => prev.filter((_, i) => i !== idx));
+  };
+
   return (
     <TooltipProvider>
       <motion.div
@@ -1301,22 +1359,23 @@ export default function ComparisonStep({
           </CardContent>
         </Card>
 
-        {/* Data Sources */}
+        {/* Next Steps Section (replaces Data Sources & Methodology) */}
         <Card className="p-4 bg-blue-50/50 border-blue-200">
-          <h4 className="font-semibold text-blue-900 mb-2">📊 Data Sources & Methodology</h4>
-          <div className="text-sm text-blue-800 space-y-1">
-            <p>• QS World University Rankings 2024 - Global university rankings and graduate employability data</p>
-            <p>• Times Higher Education World University Rankings 2024 - Academic reputation and research metrics</p>
-            <p>• National Student Survey UK 2024 - Student satisfaction and experience ratings</p>
-            <p>• Research Excellence Framework UK 2021 - Research quality and impact assessment</p>
-            <p>• HESA Higher Education Statistics UK 2024 - Official enrollment and demographic data</p>
-            <p>• University Official Websites 2024 - Tuition fees, programs, and institutional information</p>
-            <p>• UKCISA Cost of Living Survey 2024 - Living expenses for international students</p>
-            <p>• University Career Services & Alumni Tracking 2023-2024 - Employment outcomes and salary data</p>
-            <p className="text-xs text-blue-600 mt-2">
-              All financial figures converted to INR using current exchange rates (1 GBP = 105 INR)
-            </p>
+          <h4 className="font-semibold text-blue-900 mb-2">🚀 Next Steps</h4>
+          <div className="mb-2 text-xs text-gray-500">DEBUG (comparison): selectedNextStep = {selectedNextStep}</div>
+          <div className="mb-2">
+            <select
+              className="w-full p-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400"
+              value={selectedNextStep}
+              onChange={e => onNextStepChange(e.target.value)}
+            >
+              <option value="" disabled>Select your next step…</option>
+              {nextStepsOptions.map(option => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
           </div>
+          <p className="text-xs text-blue-600 mt-2">Choose your next action to move forward in your application journey.</p>
         </Card>
       </motion.div>
     </TooltipProvider>
