@@ -16,18 +16,20 @@ export async function GET(req) {
   if (error && error.code !== 'PGRST116') { // Not found is not an error
     return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
-  return new Response(JSON.stringify(data || { collegeOrder: [], notes: {} }), { status: 200 });
+  // Map 'college_order' to 'collegeOrder' for frontend compatibility
+  const response = data ? { ...data, collegeOrder: data.college_order, college_order: undefined } : { collegeOrder: [], notes: {} };
+  return new Response(JSON.stringify(response), { status: 200 });
 }
 
 export async function POST(req) {
   const body = await req.json();
-  const { phone, collegeOrder, notes } = body;
+  const { phone, college_order, notes } = body;
   if (!phone) {
     return new Response(JSON.stringify({ error: 'Missing phone in body' }), { status: 400 });
   }
   const { error } = await supabase
     .from('user_college_data')
-    .upsert({ phone, college_order: collegeOrder, notes });
+    .upsert({ phone, college_order, notes });
   if (error) {
     return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }

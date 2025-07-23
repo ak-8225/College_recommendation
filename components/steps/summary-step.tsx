@@ -1184,7 +1184,7 @@ export default function SummaryStep({
       <div className="flex flex-col sm:flex-row items-center justify-between mb-8 gap-4 sm:gap-0 px-2 sm:px-0">
         <Button
           variant="ghost"
-          onClick={() => { console.log('DEBUG: Back to Analysis clicked'); onBack(); }}
+          onClick={onBack}
           className="hover:bg-white/50 transition-all duration-300 hover:scale-105"
         >
           <ArrowLeft className="w-4 h-4 mr-2" />
@@ -1198,7 +1198,7 @@ export default function SummaryStep({
             </div>
           )}
           <Button
-            onClick={() => onNext("initial-form")}
+            onClick={() => onNext('initial-form')}
             variant="destructive"
             className="border-2 border-red-500 bg-white text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-700 font-semibold px-4 py-2 rounded-lg transition-all duration-300"
           >
@@ -1508,7 +1508,7 @@ export default function SummaryStep({
           default:
             actionItems = null;
         }
-        return (
+                          return (
           <>
             {actionItems}
             {nextStepNotes && nextStepNotes.length > 0 && (
@@ -1519,8 +1519,8 @@ export default function SummaryStep({
           </>
         );
       })()}
-    </div>
-  </div>
+                            </div>
+            </div>
 )}
     </TooltipProvider>
   )

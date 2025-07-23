@@ -647,7 +647,7 @@ export default function ComparisonStep({
     "Career Progression Rate",
     "Industry Network Score",
     "Annual Tuition Fees",
-    "Living Costs (Annual)",
+    "Living Costs",
     "Accommodation Costs",
     "Transportation Costs",
     "Scholarship Availability",
@@ -665,7 +665,7 @@ export default function ComparisonStep({
     "Career Progression Rate": "University Alumni Career Tracking Studies",
     "Industry Network Score": "QS Graduate Employability Rankings - Employer Partnerships",
     "Annual Tuition Fees": "University Official Websites",
-    "Living Costs (Annual)": "UKCISA / University Cost of Living Data",
+    "Living Costs": "UKCISA / University Cost of Living Data",
     "Accommodation Costs": "University Accommodation Services",
     "Transportation Costs": "UK Transport Authorities & Student Surveys",
     "Scholarship Availability": "University Financial Aid Offices",
@@ -679,19 +679,19 @@ export default function ComparisonStep({
   // Add a static mapping of source URLs for each metric label
   const metricSourceLinks: { [label: string]: string } = {
     "Graduate Employability Rate": "https://www.topuniversities.com/university-rankings/employability-rankings/2024",
-    "Average Starting Salary": "https://www.topuniversities.com/university-rankings/employability-rankings/2024",
-    "Career Progression Rate": "https://www.universitycareerservices.com/alumni-tracking",
+    "Average Starting Salary": "https://www.glassdoor.co.in/index.htm",
+    "Career Progression Rate": "https://www.topuniversities.com/university-rankings/employability-rankings/2024",
     "Industry Network Score": "https://www.topuniversities.com/university-rankings/employability-rankings/2024",
-    "Annual Tuition Fees": "https://www.study.eu/article/university-tuition-fees-in-europe",
-    "Living Costs (Annual)": "https://www.ukcisa.org.uk/Information--Advice/Living-in-the-UK/Living-costs",
-    "Accommodation Costs": "https://www.universityliving.com/india",
-    "Transportation Costs": "https://www.numbeo.com/cost-of-living/",
-    "Scholarship Availability": "https://www.scholarships.com/",
-    "Total Cost of Study": "https://www.topuniversities.com/student-info/student-finance/how-much-does-it-cost-study-abroad",
-    "University Ranking": "https://www.topuniversities.com/university-rankings/world-university-rankings/2024",
-    "Student Satisfaction Score": "https://www.officeforstudents.org.uk/advice-and-guidance/student-information-and-data/national-student-survey-nss/",
-    "Research Quality Rating": "https://www.ref.ac.uk/",
-    "International Student Ratio": "https://www.hesa.ac.uk/data-and-analysis/students/where-from",
+    "Annual Tuition Fees": "https://www.glassdoor.co.in/index.htm",
+    "Living Costs": "https://www.glassdoor.co.in/index.htm",
+    "Accommodation Costs": "https://www.glassdoor.co.in/index.htm",
+    "Transportation Costs": "https://www.glassdoor.co.in/index.htm",
+    "Scholarship Availability": "https://www.topuniversities.com/university-rankings/employability-rankings/2024",
+    "Total Cost of Study": "https://www.topuniversities.com/university-rankings/employability-rankings/2024",
+    "University Ranking": "https://www.topuniversities.com/university-rankings",
+    "Student Satisfaction Score": "https://www.topuniversities.com/university-rankings/employability-rankings/2024",
+    "Research Quality Rating": "https://www.topuniversities.com/university-rankings/employability-rankings/2024",
+    "International Student Ratio": "https://www.topuniversities.com/university-rankings/employability-rankings/2024",
   };
 
   // Helper to get currency symbol by country
@@ -1133,7 +1133,7 @@ export default function ComparisonStep({
             className="hover:bg-white/50 transition-all duration-300 hover:scale-105"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Results
+            Back to Analysis
           </Button>
           <div className="flex gap-3 items-center">
             
@@ -1250,7 +1250,7 @@ export default function ComparisonStep({
                     <tr key={metric.label} className={`border-b hover:bg-gray-50/50 ${rowIdx % 2 === 0 ? "bg-white" : ""}`}>
                       <td className="sticky left-0 z-20 bg-white p-4">
                         <span className="font-medium text-gray-900 flex items-center gap-2 relative">
-                          {metric.label === "Living Costs (Annual)" || 
+                          {metric.label === "Living Costs" || 
                            metric.label === "Accommodation Costs" || 
                            metric.label === "Transportation Costs" ? (
                             <>
@@ -1319,6 +1319,30 @@ export default function ComparisonStep({
                               {(() => {
                                 let sourceUrl = null;
                                 let sourceLabel = null;
+                                // Custom Leap DB source for specific metrics
+                                if ([
+                                  "Annual Tuition Fees",
+                                  "Living Costs (Annual)",
+                                  "Accommodation Costs",
+                                  "Transportation Costs",
+                                  "University Ranking"
+                                ].includes(metric.label)) {
+                                  return (
+                                    <TooltipProvider>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <span className="inline-flex items-center cursor-pointer ml-1 align-middle">
+                                            <Info className="w-4 h-4 text-gray-400 hover:text-gray-600" />
+                                          </span>
+                                        </TooltipTrigger>
+                                        <TooltipContent className="max-w-xs z-50" side="bottom" align="center">
+                                          <span className="text-xs text-gray-700">(taken from Leap's database)</span>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                  );
+                                }
+                                // Default: show external source link
                                 if (metric.label === "Average Starting Salary" && avgPackageSources[college.id]?.sourceUrl) {
                                   sourceUrl = avgPackageSources[college.id].sourceUrl;
                                   sourceLabel = avgPackageSources[college.id].sourceLabel || "Source";
@@ -1326,7 +1350,6 @@ export default function ComparisonStep({
                                   sourceUrl = breakEvenSources[college.id].sourceUrl;
                                   sourceLabel = breakEvenSources[college.id].sourceLabel || "Source";
                                 }
-                                // Fallback to static source link if dynamic not available
                                 if (!sourceUrl) {
                                   sourceUrl = metricSourceLinks[metric.label] || "https://www.topuniversities.com/";
                                   sourceLabel = metricSources[metric.label] || "Source";

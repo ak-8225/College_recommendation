@@ -27,11 +27,11 @@
   },
   "7014050702": {
     "collegeOrder": [
-      "user-0",
+      "user-4",
       "user-1",
       "user-2",
+      "user-0",
       "user-3",
-      "user-4",
       "user-5",
       "user-6",
       "user-7",
@@ -56,6 +56,13 @@
       "user-26",
       "user-27"
     ],
-    "notes": {}
+    "notes": {
+      "user-0": [
+        "Top choice for mastering finance management at Adelphi University."
+      ],
+      "user-1": [
+        "Secure your spot with Aston's unique sports quota in MSc Business and Management."
+      ]
+    }
   }
 }

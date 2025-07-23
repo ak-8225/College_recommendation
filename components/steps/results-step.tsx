@@ -352,7 +352,8 @@ export default function ResultsStep({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         phone,
-        collegeOrder: order.map(c => c.id),
+        college_order: order.map(c => c.id), // for Supabase
+        collegeOrder: order.map(c => c.id),  // for local file
         notes: Object.fromEntries(Object.entries(notesObj).map(([k, v]) => [k, v]))
       })
     });
@@ -1346,7 +1347,7 @@ export default function ResultsStep({
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span>Annual Tuition:</span>
-                      <span className="font-medium">₹{String(selectedCollegeForDetails.tuitionFee).replace(/[^\d.]/g, "")} INR per year</span>
+                      <span className="font-medium">{formatTuitionFeeLakh(selectedCollegeForDetails.tuitionFee)} per year</span>
                     </div>
                     <div className="flex justify-between">
                       <span>Living Costs:</span>
