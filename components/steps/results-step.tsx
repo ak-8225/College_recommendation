@@ -43,6 +43,9 @@ interface ResultsStepProps {
   }
   onNext: (step: Step) => void
   onBack: () => void
+  onCollegesOrderChange?: (colleges: College[]) => void;
+  selectedNextStep?: string;
+  nextStepNotes?: string[];
 }
 
 // First, update the initial USP data
@@ -265,6 +268,7 @@ export default function ResultsStep({
   userProfile,
   onNext,
   onBack,
+  onCollegesOrderChange,
 }: ResultsStepProps) {
   const [selectedCollegeForDetails, setSelectedCollegeForDetails] = useState<College | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -358,10 +362,16 @@ export default function ResultsStep({
   const handleSaveOrder = () => {
     setOrderedColleges([...orderedColleges]);
     persistUserCollegeData(orderedColleges, savedNotes);
+    if (typeof onCollegesOrderChange === 'function') {
+      onCollegesOrderChange([...orderedColleges]);
+    }
   };
   const handleResetOrder = () => {
     setOrderedColleges(colleges);
     persistUserCollegeData(colleges, savedNotes);
+    if (typeof onCollegesOrderChange === 'function') {
+      onCollegesOrderChange([...colleges]);
+    }
   };
 
   // Debug: Log when userName changes

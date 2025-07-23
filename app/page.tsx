@@ -371,6 +371,7 @@ export default function CollegeFitApp() {
               onNextStepChange={setSelectedNextStep}
               nextStepNotes={nextStepNotes}
               onNotesChange={setNextStepNotes}
+              onCollegesOrderChange={setColleges}
             />
           )}
 

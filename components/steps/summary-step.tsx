@@ -1228,6 +1228,24 @@ export default function SummaryStep({
               : ''
             }
           </p>
+          {/* Priorities display, styled like College Recommendations page */}
+          {Array.isArray(formData.priority) && formData.priority.length > 0 && (
+            <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
+              <span className="text-base text-gray-600">Priorities:</span>
+              <span className="flex flex-wrap items-center gap-2 ml-2">
+                {formData.priority.map((priority: string, idx: number, arr: string[]) => (
+                  <span
+                    key={priority}
+                    className="font-bold text-base md:text-lg text-[#bfa100]"
+                    style={{ textShadow: '0 1px 2px #f7e7b3' }}
+                  >
+                    {priority.charAt(0).toUpperCase() + priority.slice(1).replace(/_/g, ' ')}
+                    {idx < arr.length - 1 && <span className="mx-1 text-gray-400">·</span>}
+                  </span>
+                ))}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Liked Universities Section - Moved to Top */}
