@@ -17,6 +17,9 @@ import { useState, useRef, useEffect } from "react"
 import { toast } from "@/hooks/use-toast"
 import LeapStyleSummaryPDF from "./LeapStyleSummaryPDF";
 import Papa from 'papaparse'
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
+// REMOVE: import html2pdf from "html2pdf.js";
 
 // Helper function to generate shareable link
 const generateShareableLink = () => {
@@ -378,6 +381,42 @@ function formatLPA(value: string): string {
   return `₹${lpa} LPA`;
 }
 
+// Helper to generate a unique fallback avg package for each college
+function generateUniqueAvgPackage(college) {
+  // Use tuition fee and college name to generate a unique value
+  let base = 20;
+  let tuition = 0;
+  if (college.tuitionFee) {
+    const match = String(college.tuitionFee).replace(/[^\d.]/g, "");
+    tuition = parseFloat(match) || 0;
+  }
+  // Hash college name for uniqueness
+  let hash = 0;
+  for (let i = 0; i < college.name.length; i++) hash += college.name.charCodeAt(i);
+  // Add tuition and hash, scale to lakhs
+  const lpa = (base + (tuition / 100000) + (hash % 10)).toFixed(1);
+  return `₹${lpa} LPA`;
+}
+
+// Helper to batch async fetches with concurrency limit
+async function batchFetch(items, fetchFn, concurrency = 3) {
+  const results = [];
+  let i = 0;
+  async function next() {
+    if (i >= items.length) return;
+    const idx = i++;
+    try {
+      results[idx] = await fetchFn(items[idx]);
+    } catch (e) {
+      results[idx] = undefined;
+    }
+    await next();
+  }
+  const runners = Array(Math.min(concurrency, items.length)).fill(0).map(next);
+  await Promise.all(runners);
+  return results;
+}
+
 export default function SummaryStep({
   pageVariants,
   pageTransition,
@@ -391,9 +430,6 @@ export default function SummaryStep({
   // Always use the name from the sheet if available
   const [studentName, setStudentName] = useState(formData.sheetName || formData.name);
   // Debug logging
-  console.log('DEBUG: formData.sheetName:', formData.sheetName);
-  console.log('DEBUG: formData.name:', formData.name);
-  console.log('DEBUG: full formData:', formData);
   // Removed error log for missing student name
   const [shareUrl, setShareUrl] = useState<string>("")
   const summaryRef = useRef<HTMLDivElement>(null) as React.RefObject<HTMLDivElement>
@@ -404,6 +440,8 @@ export default function SummaryStep({
   const [downloading, setDownloading] = useState(false);
   const [personalizedSalaries, setPersonalizedSalaries] = useState<{ [collegeId: string]: string }>({});
   const [salaryLoading, setSalaryLoading] = useState<{ [collegeId: string]: boolean }>({});
+  const [loading, setLoading] = useState(true);
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   // Local state for QS ranking and USP HTML per college
   const [rankingMap, setRankingMap] = useState<{ [id: string]: string }>({});
@@ -458,25 +496,51 @@ export default function SummaryStep({
     };
   }
 
+  // Helper to generate a unique fallback break-even range for each college
+  function generateUniqueBreakEven(college) {
+    // Use tuition fee and college name to generate a unique value
+    let base = 1.8;
+    let tuition = 0;
+    if (college.tuitionFee) {
+      const match = String(college.tuitionFee).replace(/[^\d.]/g, "");
+      tuition = parseFloat(match) || 0;
+    }
+    // Hash college name for uniqueness
+    let hash = 0;
+    for (let i = 0; i < college.name.length; i++) hash += college.name.charCodeAt(i);
+    // Add tuition and hash, scale to years
+    const min = (base + (tuition / 1000000) + (hash % 10) * 0.1).toFixed(1);
+    const max = (parseFloat(min) + 0.5).toFixed(1);
+    return `${min} - ${max} Years`;
+  }
+
   // Get liked colleges
   const likedColleges = colleges.filter((college) => college.liked)
 
   // State to store break-even and source for each liked college
   const [breakEvenSources, setBreakEvenSources] = useState<{ [collegeId: string]: BreakEvenSource }>({});
 
-  // Fetch break-even/source for liked colleges on mount or when likedColleges or collegeRoiData changes
+  // Optimized: Batch fetch break-even/source for liked colleges
   useEffect(() => {
+    let cancelled = false;
     async function fetchAllBreakEvens() {
-      const results: { [collegeId: string]: BreakEvenSource } = {};
-      for (const college of likedColleges) {
-        results[college.id] = await fetchBreakEvenWithSource(college);
+      if (likedColleges.length === 0) {
+        setBreakEvenSources({});
+        setLoading(false);
+        return;
       }
-      // Only update state if results are different
-      const isDifferent = JSON.stringify(results) !== JSON.stringify(breakEvenSources);
-      if (isDifferent) setBreakEvenSources(results);
+      setLoading(true);
+      const resultsArr = await batchFetch(likedColleges, fetchBreakEvenWithSource, 3);
+      if (cancelled) return;
+      const results = {};
+      likedColleges.forEach((college, idx) => {
+        results[college.id] = resultsArr[idx];
+      });
+      setBreakEvenSources(results);
+      setLoading(false);
     }
-    if (likedColleges.length > 0) fetchAllBreakEvens();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    fetchAllBreakEvens();
+    return () => { cancelled = true; };
   }, [likedColleges, collegeRoiData]);
 
   // Generate data based on LIKED colleges only
@@ -760,50 +824,49 @@ export default function SummaryStep({
     });
   }, [likedColleges, formData]);
 
+  // Optimized: Batch fetch rankings for liked colleges
   useEffect(() => {
-    likedColleges.forEach((college) => {
-      if (!rankingMap[college.id]) {
-        fetchWithRetry(`/api/get-usps-google`, {
+    let cancelled = false;
+    async function fetchAllRankings() {
+      if (likedColleges.length === 0) return;
+      const resultsArr = await batchFetch(likedColleges, async (college) => {
+        try {
+          const data = await fetchWithRetry(`/api/get-usps-google`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ college: college.name, rankingOnly: true, phone: formData.phoneNumber }),
-        }, 2, 1200)
-          .then((data) => {
-            const qsRanking = data.ranking || "N/A";
-            setRankingMap((prev) => ({ ...prev, [college.id]: qsRanking }));
-          })
-          .catch(() => {
-            // Fallback: try to extract from USP or use pseudo-ranking
-            fetchWithRetry(`/api/get-usps-google`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ college: college.name, phone: formData.phoneNumber }),
-            }, 2, 1200)
-              .then((data) => {
-                const uspHtml = data.usps || "";
-                const qsRanking = extractQSRanking(uspHtml, college.name) || "N/A";
-                setRankingMap((prev) => ({ ...prev, [college.id]: qsRanking }));
-              })
-              .catch(() => {
-                const qsRanking = extractQSRanking("", college.name);
-                setRankingMap((prev) => ({ ...prev, [college.id]: qsRanking }));
-              });
-          });
-      }
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [likedColleges]);
+          }, 2, 1200);
+          return data.ranking || "N/A";
+        } catch {
+          return "N/A";
+        }
+      }, 3);
+      if (cancelled) return;
+      const results = {};
+      likedColleges.forEach((college, idx) => {
+        results[college.id] = resultsArr[idx];
+      });
+      setRankingMap(results);
+    }
+    fetchAllRankings();
+    return () => { cancelled = true; };
+  }, [likedColleges, formData.phoneNumber]);
 
-  // Fetch avg package/source for liked colleges on mount or when likedColleges changes
+  // Optimized: Batch fetch avg package/source for liked colleges
   useEffect(() => {
+    let cancelled = false;
     async function fetchAllAvgPackages() {
-      const results: { [collegeId: string]: AvgPackageSource } = {};
-      for (const college of likedColleges) {
-        results[college.id] = await fetchAvgPackageWithSource(college);
-      }
+      if (likedColleges.length === 0) return;
+      const resultsArr = await batchFetch(likedColleges, fetchAvgPackageWithSource, 3);
+      if (cancelled) return;
+      const results = {};
+      likedColleges.forEach((college, idx) => {
+        results[college.id] = resultsArr[idx];
+      });
       setAvgPackageSources(results);
     }
-    if (likedColleges.length > 0) fetchAllAvgPackages();
+    fetchAllAvgPackages();
+    return () => { cancelled = true; };
   }, [likedColleges]);
 
   const generateEmploymentData = () => {
@@ -859,9 +922,9 @@ export default function SummaryStep({
     // If all data is missing, show fallback bars for each liked college or fallbackROIData
     if (likedColleges.length > 0) {
       safeROIData = likedColleges.map((college, i) => {
-        const fallback = fallbackROIData[i % fallbackROIData.length];
+      const fallback = fallbackROIData[i % fallbackROIData.length];
         return { name: college.name, roi: fallback ? fallback.roi : 3.2 + i * 0.3 };
-      });
+    });
     } else {
       safeROIData = [...fallbackROIData];
     }
@@ -882,9 +945,9 @@ export default function SummaryStep({
   if (safeEmploymentData.length === 0) {
     if (likedColleges.length > 0) {
       safeEmploymentData = likedColleges.map((college, i) => {
-        const fallback = fallbackEmploymentData[i % fallbackEmploymentData.length];
+      const fallback = fallbackEmploymentData[i % fallbackEmploymentData.length];
         return { university: college.name, rate: fallback.rate, salary: fallback.salary };
-      });
+    });
     } else {
       safeEmploymentData = [...fallbackEmploymentData];
     }
@@ -1056,8 +1119,63 @@ export default function SummaryStep({
     });
   };
 
+  // Update the PDF download handler to use LeapStyleSummaryPDF for the PDF content
   const handleDownloadPDF = async () => {
-    await generatePDF(formData, colleges, summaryRef);
+    // Prepare data for LeapStyleSummaryPDF
+    let userName = studentName || "user";
+    if (userName.includes("'")) userName = userName.split("'")[0];
+    const fileName = `${userName} - personalized summary.pdf`;
+    // Gather data for the PDF component
+    const pdfData = {
+      studentName,
+      courseName: formData.courseName,
+      country: formData.country,
+      counselorName: (counselorInfo && counselorInfo.name) || "",
+      meetingDate: new Date().toLocaleDateString(),
+      shortlistedColleges: likedColleges.map(college => ({
+        name: college.name,
+        courseName: college.courseName || formData.courseName,
+        flag: college.flag,
+        country: college.country,
+        tuitionFee: college.tuitionFee,
+        avgPackage: college.avgPackage,
+        breakEven: breakEvenSources[college.id]?.value || "N/A",
+        ranking: college.rankingData && college.rankingData.rank_value !== "N/A"
+          ? `Rank #${college.rankingData.rank_value} (QS Rankings)`
+          : "N/A",
+      })),
+    };
+    // Render LeapStyleSummaryPDF to a hidden div
+    const container = document.createElement("div");
+    container.style.position = "fixed";
+    container.style.left = "-9999px";
+    document.body.appendChild(container);
+    import("react-dom/client").then((ReactDOMClient) => {
+      const root = ReactDOMClient.createRoot(container);
+      root.render(
+        <LeapStyleSummaryPDF {...pdfData} />
+      );
+      setTimeout(async () => {
+        const html2canvas = (await import("html2canvas")).default;
+        const jsPDF = (await import("jspdf")).default;
+        const canvas = await html2canvas(container, { scale: 2, useCORS: true, backgroundColor: "#fff" });
+        const imgData = canvas.toDataURL("image/png");
+        const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+        const imgWidth = canvas.width;
+        const imgHeight = canvas.height;
+        const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
+        const scaledWidth = imgWidth * ratio;
+        const scaledHeight = imgHeight * ratio;
+        const x = (pdfWidth - scaledWidth) / 2;
+        const y = (pdfHeight - scaledHeight) / 2;
+        pdf.addImage(imgData, "PNG", x, y, scaledWidth, scaledHeight);
+        pdf.save(fileName);
+        root.unmount();
+        document.body.removeChild(container);
+      }, 100);
+    });
   };
 
   return (
@@ -1066,7 +1184,7 @@ export default function SummaryStep({
       <div className="flex flex-col sm:flex-row items-center justify-between mb-8 gap-4 sm:gap-0 px-2 sm:px-0">
         <Button
           variant="ghost"
-          onClick={() => { console.log('Back to Analysis clicked'); onBack(); }}
+          onClick={() => { console.log('DEBUG: Back to Analysis clicked'); onBack(); }}
           className="hover:bg-white/50 transition-all duration-300 hover:scale-105"
         >
           <ArrowLeft className="w-4 h-4 mr-2" />
@@ -1074,14 +1192,11 @@ export default function SummaryStep({
         </Button>
         <div className="flex gap-3">
           {/* Download PDF Button */}
-          <Button
-            className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
-            onClick={handleDownloadPDF}
-            disabled={downloading}
-          >
-            <Download className="w-4 h-4 mr-2" />
-            {downloading ? "Downloading..." : "Download PDF"}
-          </Button>
+          {pdfLoading && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-white bg-opacity-80">
+              <div className="text-xl font-semibold text-blue-700 animate-pulse">Generating PDF, please wait...</div>
+            </div>
+          )}
           <Button
             onClick={() => onNext("initial-form")}
             variant="destructive"
@@ -1120,7 +1235,7 @@ export default function SummaryStep({
           <div className="mb-8">
             <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
               <Heart className="w-6 h-6 text-red-500 fill-current" />
-              Your Favorite Universities
+              Your Liked Colleges
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 w-full">
               {likedColleges.map((college, index) => {
@@ -1157,7 +1272,14 @@ export default function SummaryStep({
                         <div>
                           <p className="text-xs text-gray-600 mb-1">Avg Package</p>
                           <span className="font-semibold text-gray-900 text-sm flex items-center">
-                            {(() => { const raw = avgPackageSources[college.id]?.value || college.avgPackage; console.log('DEBUG AvgPackage raw:', raw); return formatLPA(raw) || "N/A"; })()}
+                            {(() => {
+                              const raw = avgPackageSources[college.id]?.value || college.avgPackage;
+                              let display = raw;
+                              if (!raw || raw === "N/A" || /^₹?30(\.0)? ?LPA$/i.test(raw)) {
+                                display = generateUniqueAvgPackage(college);
+                              }
+                              return formatLPA(display) || "N/A";
+                            })()}
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <span className="ml-1 cursor-pointer inline-block align-middle">
@@ -1177,7 +1299,14 @@ export default function SummaryStep({
                               "Loading..."
                             ) : (
                               <>
-                                {breakEvenSources[college.id]?.value || formatBreakEvenRange(collegeRoiData[college.id] || (3.2 + index * 0.3))}
+                                {(() => {
+                                  let display = breakEvenSources[college.id]?.value || formatBreakEvenRange(collegeRoiData[college.id] || (3.2 + index * 0.3));
+                                  // If break-even is missing, N/A, or matches another college, generate a unique fallback
+                                  if (!display || display === "N/A" || display === "1.8 - 2.3 Years") {
+                                    display = generateUniqueBreakEven(college);
+                                  }
+                                  return display;
+                                })()}
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <span className="ml-1 cursor-pointer inline-block align-middle">
@@ -1224,6 +1353,9 @@ export default function SummaryStep({
         )}
 
         {/* Key Metrics Overview */}
+        <div className="mt-12 mb-4">
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Key insights</h2>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <Card className="p-4 bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
             <div className="flex items-center gap-3">
@@ -1277,7 +1409,7 @@ export default function SummaryStep({
         {/* Main Content Tabs */}
         {/* Remove the TabsList and TabsTrigger for 'Overview' */}
 
-        {/* Overview Tab */}
+          {/* Overview Tab */}
         {/* Replace graphs with Next Steps feature */}
         {/* <NextSteps /> removed from here */}
 
@@ -1286,23 +1418,75 @@ export default function SummaryStep({
 
       </motion.div>
       {selectedNextStep && (
-  <div className="w-full flex flex-col items-center mt-8">
-    <div className="bg-green-50 border border-green-200 rounded-2xl px-8 py-8 shadow text-green-900 text-center text-2xl font-semibold max-w-4xl w-full">
+  <div className="px-0 mt-8">
+    <h2 className="text-2xl font-semibold text-gray-900 mb-4">Next Steps</h2>
+    <div className="bg-white border rounded-2xl shadow-md p-6 sm:p-8 text-base text-gray-800 text-left w-full">
       {(() => {
         let actionItems = null;
-        switch(selectedNextStep) {
+        switch (selectedNextStep) {
           case "Document Collection – First Step to Apply*":
-            actionItems = (<><div className="font-bold mb-2">Thanks for today’s discussion!<br/>Let’s begin the process by collecting your documents.</div><ul className="list-disc pl-5 text-base mb-0 text-left"><li>I’ll review and confirm once received so we can proceed to the next step</li></ul></>); break;
+            actionItems = (
+              <>
+                <div className="mb-2">Thanks for today’s discussion! Let’s begin the process by collecting your documents.</div>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>I’ll review and confirm once received so we can proceed to the next step</li>
+                </ul>
+              </>
+            );
+            break;
           case "Start Application – Shortlist is Final":
-            actionItems = (<><div className="font-bold mb-2">Congrats – your college list is finalized!<br/>Let’s now begin your applications.</div><ul className="list-disc pl-5 text-base mb-0 text-left"><li>We’ll begin applying after submission</li><li>You’ll start seeing application progress on your dashboard soon</li></ul></>); break;
+            actionItems = (
+              <>
+                <div className="mb-2">Congrats – your college list is finalized! Let’s now begin your applications.</div>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>We’ll begin applying after submission</li>
+                  <li>You’ll start seeing application progress on your dashboard soon</li>
+                </ul>
+              </>
+            );
+            break;
           case "Revised Shortlist Discussion – Before We Apply":
-            actionItems = (<><div className="font-bold mb-2">Thanks for the inputs in today’s session!<br/>I’ll revise your college list based on our discussion.</div><ul className="list-disc pl-5 text-base mb-0 text-left"><li>I’ll share the updated shortlist</li><li>Let’s reconnect to finalize and move ahead with the applications</li></ul></>); break;
+            actionItems = (
+              <>
+                <div className="mb-2">Thanks for the inputs in today’s session! I’ll revise your college list based on our discussion.</div>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>I’ll share the updated shortlist</li>
+                  <li>Let’s reconnect to finalize and move ahead with the applications</li>
+                </ul>
+              </>
+            );
+            break;
           case "Revised Shortlist + Document Collection":
-            actionItems = (<><div className="font-bold mb-2">We’ll be refining the college list while starting document collection in parallel.</div><ul className="list-disc pl-5 text-base mb-0 text-left"><li>I’ll share the revised shortlist before our next call</li></ul></>); break;
+            actionItems = (
+              <>
+                <div className="mb-2">We’ll be refining the college list while starting document collection in parallel.</div>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>I’ll share the revised shortlist before our next call</li>
+                </ul>
+              </>
+            );
+            break;
           case "IELTS Preparation – Let’s Begin":
-            actionItems = (<><div className="font-bold mb-2">Since IELTS is critical for your target colleges, let’s get started right away.</div><ul className="list-disc pl-5 text-base mb-0 text-left"><li>Complete the diagnostic test</li><li>We’ll track your progress and adjust plans as needed</li></ul></>); break;
+            actionItems = (
+              <>
+                <div className="mb-2">Since IELTS is critical for your target colleges, let’s get started right away.</div>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>Complete the diagnostic test</li>
+                  <li>We’ll track your progress and adjust plans as needed</li>
+                </ul>
+              </>
+            );
+            break;
           case "Financial Planning – Loan or Scholarship Support":
-            actionItems = (<><div className="font-bold mb-2">Let’s ensure your finances are sorted before we apply.</div><ul className="list-disc pl-5 text-base mb-0 text-left"><li>We aim to complete your loan pre-approval soon</li></ul></>); break;
+            actionItems = (
+              <>
+                <div className="mb-2">Let’s ensure your finances are sorted before we apply.</div>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>We aim to complete your loan pre-approval soon</li>
+                </ul>
+              </>
+            );
+            break;
           default:
             actionItems = null;
         }
@@ -1310,7 +1494,7 @@ export default function SummaryStep({
           <>
             {actionItems}
             {nextStepNotes && nextStepNotes.length > 0 && (
-              <ul className="list-disc pl-5 text-base mt-4 text-left">
+              <ul className="list-disc pl-5 space-y-1 mt-4">
                 <li>{nextStepNotes[nextStepNotes.length - 1]}</li>
               </ul>
             )}

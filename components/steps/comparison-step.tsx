@@ -313,6 +313,7 @@ export default function ComparisonStep({
       "University of Dundee": "4.2/5",
       default: "3.8/5",
     }
+    
     return satisfactionData[collegeName] || satisfactionData["default"]
   }
 
@@ -1362,7 +1363,6 @@ export default function ComparisonStep({
         {/* Next Steps Section (replaces Data Sources & Methodology) */}
         <Card className="p-4 bg-blue-50/50 border-blue-200">
           <h4 className="font-semibold text-blue-900 mb-2">🚀 Next Steps</h4>
-          <div className="mb-2 text-xs text-gray-500">DEBUG (comparison): selectedNextStep = {selectedNextStep}</div>
           <div className="mb-2">
             <select
               className="w-full p-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400"

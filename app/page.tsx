@@ -400,7 +400,6 @@ export default function CollegeFitApp() {
 
           {currentStep === "summary" && (
             <>
-              <div className="mb-2 text-xs text-gray-500">DEBUG (parent): selectedNextStep = {selectedNextStep}</div>
               <SummaryStep
                 key="summary"
                 pageVariants={pageVariants}
