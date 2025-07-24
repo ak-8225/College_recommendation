@@ -525,19 +525,21 @@ export default function SummaryStep({
     let cancelled = false;
     async function fetchAllBreakEvens() {
       if (likedColleges.length === 0) {
-        setBreakEvenSources({});
-        setLoading(false);
+        if (Object.keys(breakEvenSources).length !== 0) setBreakEvenSources({});
+        if (loading !== false) setLoading(false);
         return;
       }
-      setLoading(true);
+      if (loading !== true) setLoading(true);
       const resultsArr = await batchFetch(likedColleges, fetchBreakEvenWithSource, 3);
       if (cancelled) return;
       const results = {};
       likedColleges.forEach((college, idx) => {
         results[college.id] = resultsArr[idx];
       });
-      setBreakEvenSources(results);
-      setLoading(false);
+      // Only update state if changed
+      const isDifferent = JSON.stringify(breakEvenSources) !== JSON.stringify(results);
+      if (isDifferent) setBreakEvenSources(results);
+      if (loading !== false) setLoading(false);
     }
     fetchAllBreakEvens();
     return () => { cancelled = true; };
@@ -612,10 +614,7 @@ export default function SummaryStep({
 
   useEffect(() => {
     if (!counselorLoaded) {
-      // Get phone from formData for matching
-      const phone = formData.phoneNumber || ""
-      console.log('Fetching counselor info for phone:', phone)
-      
+      const phone = formData.phoneNumber || "";
       fetch('https://docs.google.com/spreadsheets/d/e/2PACX-1vRQtjtY6NkC6LSKa_vEVbwjfoMVUnkGpZp0Q1mpmtJEDx-KXgBLGlmTTOin-VB6ycISSIaISUVOcKin/pub?output=csv')
         .then((res) => res.text())
         .then((csv) => {
@@ -623,83 +622,84 @@ export default function SummaryStep({
             header: true,
             skipEmptyLines: true,
             complete: (results: any) => {
-              console.log('Parsed counselor CSV data:', results.data.length, 'rows')
-              
+              let updated = false;
               if (phone) {
-                // Normalize phone numbers for comparison
-                const normalize = (str: string) => String(str || '').replace(/\D/g, '').trim()
-                const userPhoneNorm = normalize(phone)
-                console.log('Normalized user phone for counselor lookup:', userPhoneNorm)
-                
-                // Find the row where the phone matches (normalized)
+                const normalize = (str: string) => String(str || '').replace(/\D/g, '').trim();
+                const userPhoneNorm = normalize(phone);
                 let row = results.data.find((r: any) => {
-                  const sheetPhoneNorm = normalize(r["Pre Login Leap User - Pre User → Phone"])
-                  return sheetPhoneNorm === userPhoneNorm
-                })
-                
-                // If no exact match, try different phone formats
+                  const sheetPhoneNorm = normalize(r["Pre Login Leap User - Pre User → Phone"]);
+                  return sheetPhoneNorm === userPhoneNorm;
+                });
                 if (!row && userPhoneNorm) {
-                  // Try with country code (91)
-                  const withCountryCode = '91' + userPhoneNorm
+                  const withCountryCode = '91' + userPhoneNorm;
                   row = results.data.find((r: any) => {
-                    const sheetPhoneNorm = normalize(r["Pre Login Leap User - Pre User → Phone"])
-                    return sheetPhoneNorm === withCountryCode
-                  })
-                  console.log('Tried with country code for counselor, found:', row ? 'yes' : 'no')
+                    const sheetPhoneNorm = normalize(r["Pre Login Leap User - Pre User → Phone"]);
+                    return sheetPhoneNorm === withCountryCode;
+                  });
                 }
-                
-                // If still no match, try without country code
                 if (!row && userPhoneNorm && userPhoneNorm.startsWith('91')) {
-                  const withoutCountryCode = userPhoneNorm.substring(2)
+                  const withoutCountryCode = userPhoneNorm.substring(2);
                   row = results.data.find((r: any) => {
-                    const sheetPhoneNorm = normalize(r["Pre Login Leap User - Pre User → Phone"])
-                    return sheetPhoneNorm === withoutCountryCode
-                  })
-                  console.log('Tried without country code for counselor, found:', row ? 'yes' : 'no')
+                    const sheetPhoneNorm = normalize(r["Pre Login Leap User - Pre User → Phone"]);
+                    return sheetPhoneNorm === withoutCountryCode;
+                  });
                 }
-                
                 if (row) {
                   const counselorName = row["Pre User Counseling - Pre User → Assigned Counsellor"];
                   const counselorPhone = row["Jerry"];
                   const studentNameFromSheet = row["Pre Login Leap User - Pre User → Name"];
-                  setCounselorInfo({
-                    name: counselorName || "Ujjbal Sharma",
-                    title: "Leap Scholar Counselor",
-                    phone: counselorPhone || "6364467022",
-                  })
-                  setStudentName(studentNameFromSheet || formData.sheetName || formData.name);
+                  if (
+                    counselorInfo?.name !== (counselorName || "Ujjbal Sharma") ||
+                    counselorInfo?.phone !== (counselorPhone || "6364467022")
+                  ) {
+                    setCounselorInfo({
+                      name: counselorName || "Ujjbal Sharma",
+                      title: "Leap Scholar Counselor",
+                      phone: counselorPhone || "6364467022",
+                    });
+                    updated = true;
+                  }
+                  if (studentName !== (studentNameFromSheet || formData.sheetName || formData.name)) {
+                    setStudentName(studentNameFromSheet || formData.sheetName || formData.name);
+                    updated = true;
+                  }
                 } else {
-                  console.log('No counselor match found for phone:', userPhoneNorm)
-                  // Use default counselor
-                  setCounselorInfo({
-                    name: "Ujjbal Sharma",
-                    title: "Leap Scholar Counselor", 
-                    phone: "6364467022",
-                  })
+                  if (counselorInfo?.name !== "Ujjbal Sharma") {
+                    setCounselorInfo({
+                      name: "Ujjbal Sharma",
+                      title: "Leap Scholar Counselor",
+                      phone: "6364467022",
+                    });
+                    updated = true;
+                  }
                 }
               } else {
-                console.log('No phone number available, using default counselor')
-                setCounselorInfo({
-                  name: "Ujjbal Sharma",
-                  title: "Leap Scholar Counselor",
-                  phone: "6364467022",
-                })
+                if (counselorInfo?.name !== "Ujjbal Sharma") {
+                  setCounselorInfo({
+                    name: "Ujjbal Sharma",
+                    title: "Leap Scholar Counselor",
+                    phone: "6364467022",
+                  });
+                  updated = true;
+                }
               }
-              setCounselorLoaded(true)
+              if (!updated) setCounselorLoaded(true);
+              else setTimeout(() => setCounselorLoaded(true), 0);
             },
-          })
+          });
         })
         .catch((error) => {
-          console.error('Error fetching counselor info:', error)
-          setCounselorInfo({
-            name: "Ujjbal Sharma",
-            title: "Leap Scholar Counselor",
-            phone: "6364467022",
-          })
-          setCounselorLoaded(true)
-        })
+          if (counselorInfo?.name !== "Ujjbal Sharma") {
+            setCounselorInfo({
+              name: "Ujjbal Sharma",
+              title: "Leap Scholar Counselor",
+              phone: "6364467022",
+            });
+          }
+          setCounselorLoaded(true);
+        });
     }
-  }, [counselorLoaded, formData.phoneNumber])
+  }, [counselorLoaded, formData.phoneNumber]);
 
   // Deterministic salary calculation based on course and experience
   function getDeterministicSalary(courseName: string, totalWorkExp: number, collegeName: string, country: string, ranking: string, tuitionFee: string): number {

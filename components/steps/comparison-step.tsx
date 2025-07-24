@@ -680,18 +680,18 @@ export default function ComparisonStep({
   const metricSourceLinks: { [label: string]: string } = {
     "Graduate Employability Rate": "https://www.topuniversities.com/university-rankings/employability-rankings/2024",
     "Average Starting Salary": "https://www.glassdoor.co.in/index.htm",
-    "Career Progression Rate": "https://www.topuniversities.com/university-rankings/employability-rankings/2024",
+    "Career Progression Rate": "https://www.universitycareerservices.com/alumni-tracking",
     "Industry Network Score": "https://www.topuniversities.com/university-rankings/employability-rankings/2024",
-    "Annual Tuition Fees": "https://www.glassdoor.co.in/index.htm",
-    "Living Costs": "https://www.glassdoor.co.in/index.htm",
-    "Accommodation Costs": "https://www.glassdoor.co.in/index.htm",
-    "Transportation Costs": "https://www.glassdoor.co.in/index.htm",
-    "Scholarship Availability": "https://www.topuniversities.com/university-rankings/employability-rankings/2024",
-    "Total Cost of Study": "https://www.topuniversities.com/university-rankings/employability-rankings/2024",
+    "Annual Tuition Fees": "https://www.study.eu/article/university-tuition-fees-in-europe",
+    "Living Costs": "https://www.numbeo.com/cost-of-living/",
+    "Accommodation Costs": "https://www.universityliving.com/india",
+    "Transportation Costs": "https://www.numbeo.com/cost-of-living/",
+    "Scholarship Availability": "https://www.scholarships.com/",
+    "Total Cost of Study": "https://www.topuniversities.com/student-info/student-finance/how-much-does-it-cost-study-abroad",
     "University Ranking": "https://www.topuniversities.com/university-rankings",
-    "Student Satisfaction Score": "https://www.topuniversities.com/university-rankings/employability-rankings/2024",
-    "Research Quality Rating": "https://www.topuniversities.com/university-rankings/employability-rankings/2024",
-    "International Student Ratio": "https://www.topuniversities.com/university-rankings/employability-rankings/2024",
+    "Student Satisfaction Score": "https://www.officeforstudents.org.uk/advice-and-guidance/student-information-and-data/national-student-survey-nss/",
+    "Research Quality Rating": "https://www.ref.ac.uk/",
+    "International Student Ratio": "https://www.hesa.ac.uk/data-and-analysis/students/where-from",
   };
 
   // Helper to get currency symbol by country
