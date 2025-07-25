@@ -382,7 +382,7 @@ function formatLPA(value: string): string {
 }
 
 // Helper to generate a unique fallback avg package for each college
-function generateUniqueAvgPackage(college) {
+function generateUniqueAvgPackage(college: College) {
   // Use tuition fee and college name to generate a unique value
   let base = 20;
   let tuition = 0;
@@ -399,21 +399,17 @@ function generateUniqueAvgPackage(college) {
 }
 
 // Helper to batch async fetches with concurrency limit
-async function batchFetch(items, fetchFn, concurrency = 3) {
-  const results = [];
+async function batchFetch<T, R>(items: T[], fetchFn: (item: T) => Promise<R>, concurrency = 3): Promise<R[]> {
+  const results: R[] = [];
   let i = 0;
   async function next() {
     if (i >= items.length) return;
     const idx = i++;
-    try {
-      results[idx] = await fetchFn(items[idx]);
-    } catch (e) {
-      results[idx] = undefined;
-    }
+    results[idx] = await fetchFn(items[idx]);
     await next();
   }
-  const runners = Array(Math.min(concurrency, items.length)).fill(0).map(next);
-  await Promise.all(runners);
+  const workers = Array(Math.min(concurrency, items.length)).fill(0).map(next);
+  await Promise.all(workers);
   return results;
 }
 
@@ -497,7 +493,7 @@ export default function SummaryStep({
   }
 
   // Helper to generate a unique fallback break-even range for each college
-  function generateUniqueBreakEven(college) {
+  function generateUniqueBreakEven(college: College) {
     // Use tuition fee and college name to generate a unique value
     let base = 1.8;
     let tuition = 0;
@@ -826,9 +822,9 @@ export default function SummaryStep({
 
   // Optimized: Batch fetch rankings for liked colleges
   useEffect(() => {
+    if (likedColleges.length === 0 || Object.keys(rankingMap).length > 0) return;
     let cancelled = false;
     async function fetchAllRankings() {
-      if (likedColleges.length === 0) return;
       const resultsArr = await batchFetch(likedColleges, async (college) => {
         try {
           const data = await fetchWithRetry(`/api/get-usps-google`, {
@@ -1046,7 +1042,7 @@ export default function SummaryStep({
     // Attach correct USPs to each liked college for the PDF
     const likedCollegesWithUSPs = likedColleges.map((college: any) => ({
       ...college,
-      usps: (Array.isArray(college.usps) ? college.usps : []).map(usp => 
+      usps: (Array.isArray(college.usps) ? college.usps : []).map((usp: string) => 
         String(usp).replace(/[\s\u00A0]*[-–—][\s\u00A0]*/g, ', ')
       )
     }));
@@ -1184,7 +1180,10 @@ export default function SummaryStep({
       <div className="flex flex-col sm:flex-row items-center justify-between mb-8 gap-4 sm:gap-0 px-2 sm:px-0">
         <Button
           variant="ghost"
-          onClick={onBack}
+          onClick={() => {
+            console.log('Back to Analysis clicked');
+            onBack();
+          }}
           className="hover:bg-white/50 transition-all duration-300 hover:scale-105"
         >
           <ArrowLeft className="w-4 h-4 mr-2" />
@@ -1193,12 +1192,15 @@ export default function SummaryStep({
         <div className="flex gap-3">
           {/* Download PDF Button */}
           {pdfLoading && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-white bg-opacity-80">
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-white bg-opacity-80 pointer-events-auto">
               <div className="text-xl font-semibold text-blue-700 animate-pulse">Generating PDF, please wait...</div>
             </div>
           )}
           <Button
-            onClick={() => onNext('initial-form')}
+            onClick={() => {
+              console.log('Logout clicked');
+              onNext('initial-form');
+            }}
             variant="destructive"
             className="border-2 border-red-500 bg-white text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-700 font-semibold px-4 py-2 rounded-lg transition-all duration-300"
           >
@@ -1369,60 +1371,6 @@ export default function SummaryStep({
             </div>
           </div>
         )}
-
-        {/* Key Metrics Overview */}
-        <div className="mt-12 mb-4">
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Key insights</h2>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <Card className="p-4 bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-                <TrendingUp className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <p className="text-sm text-blue-700 font-medium">Avg Break-even</p>
-                <p className="text-2xl font-bold text-blue-900">2.5 - 3.5 Years</p>
-              </div>
-            </div>
-          </Card>
-
-          <Card className="p-4 bg-gradient-to-br from-green-50 to-green-100 border-green-200">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center">
-                <Users className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <p className="text-sm text-green-700 font-medium">Employment Rate</p>
-                <p className="text-2xl font-bold text-green-900">92%</p>
-              </div>
-            </div>
-          </Card>
-
-          <Card className="p-4 bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center">
-                <DollarSign className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <p className="text-sm text-purple-700 font-medium">Avg. Salary</p>
-                <p className="text-2xl font-bold text-purple-900">£27.9K</p>
-              </div>
-            </div>
-          </Card>
-
-          <Card className="p-4 bg-gradient-to-br from-red-50 to-red-100 border-red-200">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-red-600 rounded-lg flex items-center justify-center">
-                <Heart className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <p className="text-sm text-red-700 font-medium">Liked Universities</p>
-                <p className="text-2xl font-bold text-red-900">{likedColleges.length}</p>
-              </div>
-            </div>
-          </Card>
-        </div>
 
         {/* Main Content Tabs */}
         {/* Remove the TabsList and TabsTrigger for 'Overview' */}

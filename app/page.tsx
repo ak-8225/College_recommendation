@@ -113,6 +113,7 @@ export default function CollegeFitApp() {
   const [nextStepNotes, setNextStepNotes] = useState<string[]>([]);
 
   const handleNext = (step: Step) => {
+    console.log('[handleNext] called with step:', step, 'currentStep:', currentStep);
     if (step === 'results') {
       handleShowLoader();
       return;
@@ -160,7 +161,7 @@ export default function CollegeFitApp() {
   }
 
   const handleBack = () => {
-    console.log('handleBack called, currentStep:', currentStep);
+    console.log('[handleBack] called, currentStep:', currentStep);
     const stepOrder: Step[] = ["welcome", "initial-form", "results", "comparison", "summary"];
     const currentIndex = stepOrder.indexOf(currentStep);
     if (currentStep === "results") {
@@ -304,6 +305,7 @@ export default function CollegeFitApp() {
     return new Promise((resolve) => setTimeout(resolve, 2000)); // Simulate 2s fetch
   }
 
+  console.log('[CollegeFitApp render] currentStep:', currentStep);
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
       <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-6 max-w-full sm:max-w-6xl w-full">
