@@ -1,3 +1,4 @@
+
 "use client"
 
 import { motion } from "framer-motion"
@@ -48,6 +49,26 @@ export default function InitialFormStep({
   setColleges,
 }: InitialFormStepProps) {
   const fetchStartTimeRef = useRef<number | null>(null)
+
+  // Career aspirations options
+  const CAREER_OPTIONS = [
+    { value: 'get_job', label: 'Get a job' },
+    { value: 'get_pr', label: 'Get PR/settle in abroad' },
+    { value: 'return_india', label: 'Return to India' },
+    { value: 'research_phd', label: 'Research/PhD etc.' },
+  ];
+  // College parameters options
+  const PARAM_OPTIONS = [
+    { value: 'cost_budget', label: 'Cost/Budget' },
+    { value: 'research_opportunities', label: 'Research opportunities' },
+    { value: 'job_opportunities', label: 'Job opportunities / Recruits' },
+    { value: 'alum_network', label: 'Alum network' },
+    { value: 'locations', label: 'Locations' },
+    { value: 'quality_education', label: 'Quality of Education' },
+  ];
+  // Dropdown state for new questions
+  const [careerOpen, setCareerOpen] = useState(false);
+  const [paramOpen, setParamOpen] = useState(false);
 
   // Helper function to convert GBP to INR
   const convertGBPToINR = (gbpAmount: string): string => {
@@ -858,18 +879,7 @@ export default function InitialFormStep({
       transition={pageTransition}
       className="max-w-full sm:max-w-4xl mx-auto px-2 sm:px-0"
     >
-      <div className="mb-12">
-        <Button
-          variant="ghost"
-          onClick={onBack}
-          className="mb-8 hover:bg-white/50 transition-all duration-300 hover:scale-105"
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back
-        </Button>
-
-        {/* Removed heading and subtitle here */}
-      </div>
+      {/* Removed 'Your College Navigator' button from top left */}
 
       {!profileFetched ? (
         <Card className="p-4 sm:p-6 md:p-8 bg-white/80 backdrop-blur-sm border-0 shadow-xl hover:shadow-2xl transition-all duration-500 rounded-2xl w-full">
@@ -903,32 +913,32 @@ export default function InitialFormStep({
               animate={{ x: 0, opacity: 1 }}
               transition={{ delay: 0.4, duration: 0.5 }}
             >
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Priority Features (Select Multiple)</label>
-              <div className="relative" ref={priorityRef}>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Q1) What are your career aspirations after completing your masters in abroad?</label>
+              <div className="relative mb-4">
                 <button
                   type="button"
                   className="w-full h-12 rounded-xl border-2 border-gray-200 focus:border-blue-500 transition-all duration-300 hover:border-gray-300 bg-white/50 text-base px-3 flex items-center justify-between"
-                  onClick={() => setPriorityOpen((open) => !open)}
+                  onClick={() => setCareerOpen((open) => !open)}
                 >
                   <span className="truncate text-left flex-1">
-                    {(formData.priority && formData.priority.length > 0)
-                      ? PRIORITY_OPTIONS.filter(opt => formData.priority.includes(opt.value)).map(opt => opt.label).join(", ")
-                      : "Select your priorities"}
+                    {(formData.careerAspirations && formData.careerAspirations.length > 0)
+                      ? CAREER_OPTIONS.filter(opt => formData.careerAspirations.includes(opt.value)).map(opt => opt.label).join(", ")
+                      : "Select your aspirations"}
                   </span>
-                  <svg className={`w-4 h-4 ml-2 transition-transform ${priorityOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+                  <svg className={`w-4 h-4 ml-2 transition-transform ${careerOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
                 </button>
-                {priorityOpen && (
+                {careerOpen && (
                   <div className="absolute z-20 mt-2 w-full bg-white border border-gray-200 rounded-xl shadow-xl max-h-60 overflow-y-auto p-2 animate-fade-in">
-                    {PRIORITY_OPTIONS.map(opt => (
+                    {CAREER_OPTIONS.map(opt => (
                       <label key={opt.value} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-blue-50 cursor-pointer">
                         <input
                           type="checkbox"
-                          checked={formData.priority?.includes(opt.value) || false}
+                          checked={formData.careerAspirations?.includes(opt.value) || false}
                           onChange={e => {
-                            const selected = new Set(formData.priority || []);
+                            const selected = new Set(formData.careerAspirations || []);
                             if (e.target.checked) selected.add(opt.value);
                             else selected.delete(opt.value);
-                            setFormData((prev: any) => ({ ...prev, priority: Array.from(selected) }));
+                            setFormData((prev: any) => ({ ...prev, careerAspirations: Array.from(selected) }));
                           }}
                           className="accent-blue-600 w-4 h-4 rounded"
                         />
@@ -938,8 +948,44 @@ export default function InitialFormStep({
                   </div>
                 )}
               </div>
-              <div className="text-xs text-gray-500 mt-1">Choose the features that matter most to you.</div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2 mt-4">Q2) Based on what parameters will you choose your College's course (any 2/3)</label>
+              <div className="relative">
+                <button
+                  type="button"
+                  className="w-full h-12 rounded-xl border-2 border-gray-200 focus:border-blue-500 transition-all duration-300 hover:border-gray-300 bg-white/50 text-base px-3 flex items-center justify-between"
+                  onClick={() => setParamOpen((open) => !open)}
+                >
+                  <span className="truncate text-left flex-1">
+                    {(formData.collegeParameters && formData.collegeParameters.length > 0)
+                      ? PARAM_OPTIONS.filter(opt => formData.collegeParameters.includes(opt.value)).map(opt => opt.label).join(", ")
+                      : "Select parameters"}
+                  </span>
+                  <svg className={`w-4 h-4 ml-2 transition-transform ${paramOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+                </button>
+                {paramOpen && (
+                  <div className="absolute z-20 mt-2 w-full bg-white border border-gray-200 rounded-xl shadow-xl max-h-60 overflow-y-auto p-2 animate-fade-in">
+                    {PARAM_OPTIONS.map(opt => (
+                      <label key={opt.value} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-blue-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.collegeParameters?.includes(opt.value) || false}
+                          onChange={e => {
+                            const selected = new Set(formData.collegeParameters || []);
+                            if (e.target.checked) selected.add(opt.value);
+                            else selected.delete(opt.value);
+                            setFormData((prev: any) => ({ ...prev, collegeParameters: Array.from(selected) }));
+                          }}
+                          className="accent-blue-600 w-4 h-4 rounded"
+                        />
+                        <span className="text-sm">{opt.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="text-xs text-gray-500 mt-1">Choose the options that matter most to you.</div>
             </motion.div>
+
 
             {isLoading && !fetchError && (
               <motion.div

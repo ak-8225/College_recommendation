@@ -10,15 +10,17 @@ import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ChartTooltip } from "@/components/ui/chart"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Line, ComposedChart, Legend } from "recharts"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { TooltipProvider, Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Step, College } from "@/types/college"
 
 import { useState, useRef, useEffect } from "react"
 import { toast } from "@/hooks/use-toast"
 import LeapStyleSummaryPDF from "./LeapStyleSummaryPDF";
+
 import Papa from 'papaparse'
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
+
 // REMOVE: import html2pdf from "html2pdf.js";
 
 // Helper function to generate shareable link
@@ -26,6 +28,47 @@ const generateShareableLink = () => {
   const baseUrl = window.location.origin
   const shareUrl = `${baseUrl}/shared-report/${Date.now()}`
   return shareUrl
+}
+
+// Helper function to convert number to Roman numerals
+function toRoman(num: number): string {
+  const romanNumerals = ['i', 'ii', 'iii', 'iv', 'v', 'vi', 'vii', 'viii', 'ix', 'x'];
+  return romanNumerals[num] || num.toString();
+}
+
+// Add helper functions from results-step.tsx for exact data formatting
+function isTuitionFeeInvalid(fee: any) {
+  if (!fee) return true;
+  const num = parseFloat(String(fee).replace(/[^\d.]/g, ""));
+  // Consider invalid if missing, zero, or less than ₹50,000/year
+  return isNaN(num) || num < 50000;
+}
+
+// Helper to format tuition fee exactly like results-step.tsx
+function formatTuitionFee(college: College, fallbackTuitionFees: any = {}) {
+  let fee = college.tuitionFee;
+  if (isTuitionFeeInvalid(fee) && fallbackTuitionFees[college.id]) {
+    fee = fallbackTuitionFees[college.id];
+  }
+  if (!fee || isTuitionFeeInvalid(fee)) fee = "8.0";
+  const num = parseFloat(String(fee).replace(/[^\d.]/g, ""));
+  if (isNaN(num)) return "N/A";
+  const lakhs = Math.round(num / 100000);
+  return `₹${lakhs}L`;
+}
+
+// Helper to format location exactly like results-step.tsx
+function formatLocation(college: College) {
+  return college.city && college.country 
+    ? `${college.city} - ${college.country}`.replace(/(UK|USA|Canada|France)(\s*-\s*\1|\s*,\s*\1)*$/g, '$1')
+    : (college as any).location || '';
+}
+
+// Helper to format ranking exactly like results-step.tsx
+function formatRanking(college: College) {
+  return college.rankingData && college.rankingData.rank_value !== "N/A"
+    ? `Rank #${college.rankingData.rank_value} (${college.rankingData.rank_provider_name})`
+    : "N/A";
 }
 
 // Helper function to copy to clipboard
@@ -262,6 +305,8 @@ interface SummaryStepProps {
   onBack: () => void
   selectedNextStep?: string
   nextStepNotes?: string[]
+  usps?: { [collegeId: string]: string }
+  reorderedUSPs?: { [collegeId: string]: string[] }
 }
 
 // --- Chart Card Wrapper ---
@@ -422,13 +467,133 @@ export default function SummaryStep({
   onBack,
   selectedNextStep,
   nextStepNotes,
+  usps = {},
+  reorderedUSPs = {},
 }: SummaryStepProps) {
+  
+  // Function to load USPs from CSV for a college (same as results-step.tsx)
+  async function loadUSPsForCollege(college: College): Promise<void> {
+    if (csvUSPs[college.id] || csvUSPsLoading[college.id]) {
+      return; // Already loaded or loading
+    }
+
+    setCsvUSPsLoading(prev => ({ ...prev, [college.id]: true }));
+
+    try {
+      console.log(`[Summary USP Debug] Fetching USPs for phone: ${formData?.phone}, college: ${college.name}, program: ${formData?.intendedMajor}`);
+      
+      const response = await fetch('/api/get-csv-usps', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          phone: formData?.phone || '',
+          collegeName: college.name,
+          program: formData?.intendedMajor || ''
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`API call failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log(`[Summary USP Debug] API response for ${college.name} - ${formData?.intendedMajor}:`, data);
+
+      if (data.usps && Array.isArray(data.usps) && data.usps.length > 0) {
+        // Set program-specific USPs for this college
+        setCsvUSPs(prev => ({ ...prev, [college.id]: data.usps }));
+      } else {
+        setCsvUSPs(prev => ({ 
+          ...prev, 
+          [college.id]: [`USPs for phone ${formData?.phone} not found`] 
+        }));
+      }
+
+    } catch (error) {
+      console.error(`[Summary USP Debug] Error fetching USPs for phone ${formData?.phone}:`, error);
+      setCsvUSPs(prev => ({ 
+        ...prev, 
+        [college.id]: [`Error loading USPs for phone ${formData?.phone}`] 
+      }));
+    } finally {
+      setCsvUSPsLoading(prev => ({ ...prev, [college.id]: false }));
+    }
+  }
+
+  // Function to get current USPs for a college
+  function getCurrentUSPs(college: College) {
+    console.log(`[Summary getCurrentUSPs] ${college.name}:`, {
+      collegeId: college.id,
+      hasCsvUSPs: !!csvUSPs[college.id],
+      hasUsps: !!usps[college.id],
+      hasReorderedUSPs: !!reorderedUSPs[college.id],
+      collegeTags: college.tags
+    });
+    
+    // First priority: CSV USPs from sheet (same as results page)
+    if (csvUSPs[college.id]) {
+      console.log(`[Summary getCurrentUSPs] Using CSV USPs for ${college.name}:`, csvUSPs[college.id]);
+      return csvUSPs[college.id];
+    }
+    
+    // Second priority: reordered USPs from results page
+    if (reorderedUSPs[college.id] && reorderedUSPs[college.id].length > 0) {
+      console.log(`[Summary getCurrentUSPs] Using reordered USPs for ${college.name}`);
+      return reorderedUSPs[college.id];
+    }
+    
+    // Third priority: original USPs from results page
+    const originalUspLines = usps[college.id] || "";
+    if (originalUspLines) {
+      const uspLines = originalUspLines
+        .split(/\n|\r/)
+        .map(line => line.trim())
+        .filter(line => line.startsWith('-'))
+        .map(line => line.replace(/^[-•]\s*/, ''));
+      if (uspLines.length > 0) {
+        console.log(`[Summary getCurrentUSPs] Using parsed USPs for ${college.name}`);
+        return uspLines;
+      }
+    }
+    
+    // Fourth priority: college tags ONLY if they're meaningful
+    if (college.tags && Array.isArray(college.tags) && college.tags.length > 0) {
+      const genericTags = ["moderate", "main campus", "main", "campus", "average", "standard"];
+      const meaningfulTags = college.tags.filter(tag => 
+        !genericTags.includes(tag.toLowerCase().trim())
+      );
+      if (meaningfulTags.length > 0) {
+        console.log(`[Summary getCurrentUSPs] Using meaningful college tags for ${college.name}:`, meaningfulTags);
+        return meaningfulTags;
+      }
+    }
+    
+    // Loading state
+    if (csvUSPsLoading[college.id]) {
+      return ['Loading USPs...'];
+    }
+    
+    // Fallback USPs
+    console.log(`[Summary getCurrentUSPs] Using fallback USPs for ${college.name}`);
+    return [
+      "Quality education and academic excellence",
+      "International recognition and accreditation", 
+      "Career development opportunities",
+      "Supportive learning environment"
+    ];
+  }
+  // State for selected college in the liked colleges grid (for USPs display)
+  const likedColleges = colleges.filter((college) => college.liked);
+  const [selectedCollegeId, setSelectedCollegeId] = useState(likedColleges[0]?.id || null);
   // Always use the name from the sheet if available
   const [studentName, setStudentName] = useState(formData.sheetName || formData.name);
-  // Debug logging
-  // Removed error log for missing student name
-  const [shareUrl, setShareUrl] = useState<string>("")
-  const summaryRef = useRef<HTMLDivElement>(null) as React.RefObject<HTMLDivElement>
+  const [shareUrl, setShareUrl] = useState<string>("");
+  const summaryRef = useRef<HTMLDivElement>(null) as React.RefObject<HTMLDivElement>;
+  // Add state for CSV-based USPs
+  const [csvUSPs, setCsvUSPs] = useState<{ [collegeId: string]: string[] }>({})
+  const [csvUSPsLoading, setCsvUSPsLoading] = useState<{ [collegeId: string]: boolean }>({})
   const [collegeRoiData, setCollegeRoiData] = useState<{ [collegeId: string]: number }>({})
   const [roiLoading, setRoiLoading] = useState<{ [collegeId: string]: boolean }>({})
   const [counselorInfo, setCounselorInfo] = useState<{ name: string; title: string; phone?: string } | null>(null)
@@ -439,11 +604,8 @@ export default function SummaryStep({
   const [loading, setLoading] = useState(true);
   const [pdfLoading, setPdfLoading] = useState(false);
 
-  // Local state for QS ranking and USP HTML per college
+  // Local state for rankings and package source per college
   const [rankingMap, setRankingMap] = useState<{ [id: string]: string }>({});
-  const [uspHtmlMap, setUspHtmlMap] = useState<{ [id: string]: string }>({});
-
-  // State to store avg package and source for each liked college
   const [avgPackageSources, setAvgPackageSources] = useState<{ [collegeId: string]: AvgPackageSource }>({});
 
   // Helper to format break-even range
@@ -510,8 +672,7 @@ export default function SummaryStep({
     return `${min} - ${max} Years`;
   }
 
-  // Get liked colleges
-  const likedColleges = colleges.filter((college) => college.liked)
+    // likedColleges already declared at the top of the function
 
   // State to store break-even and source for each liked college
   const [breakEvenSources, setBreakEvenSources] = useState<{ [collegeId: string]: BreakEvenSource }>({});
@@ -528,7 +689,7 @@ export default function SummaryStep({
       if (loading !== true) setLoading(true);
       const resultsArr = await batchFetch(likedColleges, fetchBreakEvenWithSource, 3);
       if (cancelled) return;
-      const results = {};
+      const results: Record<string, BreakEvenSource> = {};
       likedColleges.forEach((college, idx) => {
         results[college.id] = resultsArr[idx];
       });
@@ -558,6 +719,13 @@ export default function SummaryStep({
       color: "#4F46E5",
     }))
   }
+
+  // Load USPs from CSV for all liked colleges
+  useEffect(() => {
+    likedColleges.forEach((college) => {
+      loadUSPsForCollege(college);
+    });
+  }, [likedColleges]);
 
   // Fetch ROI data for liked colleges
   useEffect(() => {
@@ -838,7 +1006,7 @@ export default function SummaryStep({
         }
       }, 3);
       if (cancelled) return;
-      const results = {};
+      const results: Record<string, string> = {};
       likedColleges.forEach((college, idx) => {
         results[college.id] = resultsArr[idx];
       });
@@ -855,7 +1023,7 @@ export default function SummaryStep({
       if (likedColleges.length === 0) return;
       const resultsArr = await batchFetch(likedColleges, fetchAvgPackageWithSource, 3);
       if (cancelled) return;
-      const results = {};
+      const results: Record<string, AvgPackageSource> = {};
       likedColleges.forEach((college, idx) => {
         results[college.id] = resultsArr[idx];
       });
@@ -1250,137 +1418,104 @@ export default function SummaryStep({
           )}
         </div>
 
-        {/* Liked Universities Section - Moved to Top */}
+        {/* Liked Universities Section - Improved UI */}
         {likedColleges.length > 0 && (
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
-              <Heart className="w-6 h-6 text-red-500 fill-current" />
+          <div className="mb-8 w-full">
+            <h2 className="text-3xl font-bold text-gray-900 mb-8 flex items-center gap-3">
+              <Heart className="w-7 h-7 text-red-500 fill-current" />
               Your Liked Colleges
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 w-full">
-              {likedColleges.map((college, index) => {
-                const details = getCollegeDetails(college);
-                return (
-                  <Card
-                    key={college.id}
-                    className="p-6 bg-white border-gray-200 shadow-xl rounded-2xl hover:shadow-2xl transition-all duration-300 hover:scale-105"
-                  >
-                    <div className="flex items-center gap-4 mb-6">
-                      <div
-                        className={`w-12 h-12 bg-gradient-to-br ${college.color} rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg`}
-                      >
-                        {college.name.charAt(0)}
+            <div className="space-y-8">
+              {likedColleges.map((college, collegeIndex) => (
+                <div
+                  key={college.id}
+                  className="bg-white rounded-2xl border-2 border-gray-200 shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden"
+                >
+                  {/* College Header */}
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-8 py-6 border-b border-gray-200">
+                    <div className="flex items-center gap-6">
+                      <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-3xl shadow-lg">
+                        {college.name?.[0] || '?'}
                       </div>
                       <div className="flex-1">
-                        <h3 className="font-bold text-gray-900 text-2xl leading-tight mb-1">{college.name}</h3>
-                        {formData.courseName && (
-                          <div className="italic text-sm text-gray-500 mt-0.5">{formData.courseName}</div>
-                        )}
-                        <p className="text-sm text-gray-600 flex items-center gap-1">
-                          {college.flag} {college.country}
-                        </p>
-                      </div>
-                      <Heart className="w-6 h-6 text-red-500 fill-current" />
-                    </div>
-
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-200">
-                        <div>
-                          <p className="text-xs text-gray-600 mb-1">Tuition Fee</p>
-                          <p className="font-semibold text-gray-900 text-sm">{formatLakhs(details.tuitionFees)}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-600 mb-1">Avg Package</p>
-                          <span className="font-semibold text-gray-900 text-sm flex items-center">
-                            {(() => {
-                              const raw = avgPackageSources[college.id]?.value || college.avgPackage;
-                              let display = raw;
-                              if (!raw || raw === "N/A" || /^₹?30(\.0)? ?LPA$/i.test(raw)) {
-                                display = generateUniqueAvgPackage(college);
-                              }
-                              return formatLPA(display) || "N/A";
-                            })()}
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span className="ml-1 cursor-pointer inline-block align-middle">
-                                  <span className="inline-block w-4 h-4 bg-blue-100 text-blue-700 rounded-full text-xs font-bold flex items-center justify-center">i</span>
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent side="top" align="center">
-                                {avgPackageSources[college.id]?.sourceLabel || "Source: Glassdoor (estimate)"}
-                              </TooltipContent>
-                            </Tooltip>
+                        <h3 className="font-bold text-2xl text-gray-900 mb-2">{college.name}</h3>
+                        <p className="text-gray-600 text-lg mb-3">{college.courseName}</p>
+                        <div className="text-gray-600 flex items-center gap-1 text-sm mb-3">
+                          <span className="text-base text-gray-600">
+                            {formatLocation(college)}
                           </span>
                         </div>
-                        <div>
-                          <p className="text-xs text-gray-600 mb-1">Break-even</p>
-                          <span className="font-semibold text-green-600 text-sm flex items-center">
-                            {roiLoading[college.id] ? (
-                              "Loading..."
-                            ) : (
-                              <>
-                                {(() => {
-                                  let display = breakEvenSources[college.id]?.value || formatBreakEvenRange(collegeRoiData[college.id] || (3.2 + index * 0.3));
-                                  // If break-even is missing, N/A, or matches another college, generate a unique fallback
-                                  if (!display || display === "N/A" || display === "1.8 - 2.3 Years") {
-                                    display = generateUniqueBreakEven(college);
-                                  }
-                                  return display;
-                                })()}
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <span className="ml-1 cursor-pointer inline-block align-middle">
-                                      <span className="inline-block w-4 h-4 bg-blue-100 text-blue-700 rounded-full text-xs font-bold flex items-center justify-center">i</span>
-                                    </span>
-                                  </TooltipTrigger>
-                                  <TooltipContent side="top" align="center">
-                                    {breakEvenSources[college.id]?.sourceLabel || "Source: Glassdoor (estimate)"}
-                                  </TooltipContent>
-                                </Tooltip>
-                              </>
-                            )}
+                        <div className="flex items-center gap-4">
+                          <span className="bg-blue-100 px-4 py-2 rounded-full text-sm text-blue-800 font-semibold border border-blue-200">
+                            {formatRanking(college)}
                           </span>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-600 mb-1">Ranking</p>
-                          <span className="font-semibold text-gray-900 text-sm flex items-center">
-                            {college.rankingData && college.rankingData.rank_value !== "N/A"
-                              ? `Rank #${college.rankingData.rank_value}`
-                              : "N/A"}
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span className="ml-1 cursor-pointer inline-block align-middle">
-                                  <span className="inline-block w-4 h-4 bg-blue-100 text-blue-700 rounded-full text-xs font-bold flex items-center justify-center">i</span>
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent side="top" align="center">
-                                {college.rankingData && college.rankingData.rank_provider_name !== "N/A"
-                                  ? `Source: ${college.rankingData.rank_provider_name}`
-                                  : "Source: QS World University Rankings 2024"}
-                              </TooltipContent>
-                            </Tooltip>
+                          <span className="bg-green-100 px-4 py-2 rounded-full text-sm text-green-800 font-semibold border border-green-200">
+                            Tuition fee: {formatTuitionFee(college)}
                           </span>
+                          {college.country && (
+                            <span className="bg-gray-100 px-4 py-2 rounded-full text-sm text-gray-700 font-semibold border border-gray-200">
+                              {college.country}
+                            </span>
+                          )}
                         </div>
                       </div>
-
-                      {/* Removed campus/moderate tags as requested */}
                     </div>
-                  </Card>
-                );
-              })}
+                  </div>
+
+                  {/* USPs Section */}
+                  <div className="px-8 py-6">
+                    <h4 className="text-lg font-semibold text-blue-700 mb-6 flex items-center gap-2">
+                      <span className="w-2 h-2 bg-blue-600 rounded-full"></span>
+                      Key USPs
+                    </h4>
+                    <div className="space-y-3">
+                      {(() => {
+                        const collegeUSPs = getCurrentUSPs(college);
+                        return collegeUSPs && collegeUSPs.length > 0 ? (
+                          collegeUSPs.map((usp, idx) => (
+                            <div key={idx} className="flex items-start text-base text-gray-900 font-medium group bg-gray-50 rounded-lg px-4 py-3 hover:bg-gray-100 transition-all duration-200 border border-gray-200">
+                              <span className="flex-1">
+                                <span className="mr-3 text-gray-600 font-semibold">({toRoman(idx)})</span>
+                                <span className="text-gray-800">{usp}</span>
+                              </span>
+                              <div className="flex items-center gap-2 ml-4">
+                                <select
+                                  className="text-xs rounded-md border border-gray-300 px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400"
+                                  value={idx}
+                                  onChange={() => {}} // Disabled for summary page
+                                  style={{ width: 50 }}
+                                  aria-label="USP order"
+                                  disabled
+                                >
+                                  {Array.from({ length: collegeUSPs.length }).map((_, orderIdx) => (
+                                    <option key={orderIdx} value={orderIdx}>{toRoman(orderIdx)}</option>
+                                  ))}
+                                </select>
+                                <button
+                                  className="text-xs text-red-500 hover:text-red-700 opacity-60 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-red-50"
+                                  title="Remove USP"
+                                  aria-label="Remove USP"
+                                  type="button"
+                                  disabled // Disabled for summary page
+                                >
+                                  ✖️
+                                </button>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="bg-gray-50 rounded-lg px-4 py-6 text-center">
+                            <p className="text-gray-500 text-base italic">No USP data available for this college</p>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
-
-        {/* Main Content Tabs */}
-        {/* Remove the TabsList and TabsTrigger for 'Overview' */}
-
-          {/* Overview Tab */}
-        {/* Replace graphs with Next Steps feature */}
-        {/* <NextSteps /> removed from here */}
-
-        {/* Place NextSteps at the very bottom of the page */}
-        {/* <NextSteps /> */}
 
       </motion.div>
       {selectedNextStep && (

@@ -1,18 +1,5 @@
 {
-  "8848970584": {
-    "collegeOrder": [
-      "user-0",
-      "user-1",
-      "user-2",
-      "user-3",
-      "user-4",
-      "user-5"
-    ],
-    "notes": {
-      "user-0": []
-    }
-  },
-  "8779037988": {
+  "6370309143": {
     "collegeOrder": [
       "user-0",
       "user-1",
@@ -28,61 +15,12 @@
       "user-11",
       "user-12",
       "user-13",
-      "user-14",
-      "user-15"
+      "user-14"
     ],
     "notes": {
-      "user-0": [
-        "Zero application fee of 0% for MS in Marketing Analytics at CSU Long Beach."
+      "user-14": [
+        "Zero application fee of 0% for MSc Operations Management & Business Analytics at University of Salford."
       ]
-    }
-  },
-  "9676583799": {
-    "collegeOrder": [
-      "user-1",
-      "user-3",
-      "user-2",
-      "user-0",
-      "user-4",
-      "user-5",
-      "user-6",
-      "user-7",
-      "user-8",
-      "user-9",
-      "user-10",
-      "user-11"
-    ],
-    "notes": {
-      "user-2": [
-        "No application fee of 0% for MSc Petroleum Engineering at Heriot Watt University."
-      ]
-    }
-  },
-  "9985199954": {
-    "collegeOrder": [
-      "user-0",
-      "user-1",
-      "user-2",
-      "user-3",
-      "user-4",
-      "user-5",
-      "user-6",
-      "user-7",
-      "user-8",
-      "user-9",
-      "user-10",
-      "user-11",
-      "user-12",
-      "user-13",
-      "user-14",
-      "user-15",
-      "user-16",
-      "user-17",
-      "user-18",
-      "user-19"
-    ],
-    "notes": {
-      "user-0": []
     }
   }
 }

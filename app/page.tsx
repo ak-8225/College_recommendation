@@ -361,6 +361,8 @@ export default function CollegeFitApp() {
                 country: formData.country || "your country",
                 phone: formData.phoneNumber || "",
                 priorities: (formData as any).priority || [], // <-- Pass priorities here, type assertion to avoid TS error
+                careerAspirations: (formData as any).careerAspirations || [],
+                collegeParameters: (formData as any).collegeParameters || [],
               }}
               onNext={handleNext}
               onBack={handleBack}

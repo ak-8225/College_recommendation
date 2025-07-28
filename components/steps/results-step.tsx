@@ -40,12 +40,16 @@ interface ResultsStepProps {
     country: string
     phone: string
     priorities?: string[]
+    careerAspirations?: string[]
+    collegeParameters?: string[]
   }
   onNext: (step: Step) => void
   onBack: () => void
   onCollegesOrderChange?: (colleges: College[]) => void;
   selectedNextStep?: string;
   nextStepNotes?: string[];
+  onNextStepChange?: (step: string) => void;
+  onNotesChange?: (notes: string[]) => void;
 }
 
 // First, update the initial USP data
@@ -275,12 +279,18 @@ export default function ResultsStep({
   onNext,
   onBack,
   onCollegesOrderChange,
+  selectedNextStep,
+  nextStepNotes,
+  onNextStepChange,
+  onNotesChange,
 }: ResultsStepProps) {
   const [selectedCollegeForDetails, setSelectedCollegeForDetails] = useState<College | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [hoveredCollege, setHoveredCollege] = useState<string | null>(null)
   const [usps, setUsps] = useState<{ [collegeId: string]: string }>({})
   const [uspsLoading, setUspsLoading] = useState<{ [collegeId: string]: boolean }>({})
+  // Add state for CSV-based USPs
+  const [csvUSPs, setCsvUSPs] = useState<{ [collegeId: string]: string[] }>({})
   const [roiData, setRoiData] = useState<{ [collegeId: string]: number }>({})
   const [roiLoading, setRoiLoading] = useState<{ [collegeId: string]: boolean }>({})
   const [costData, setCostData] = useState<any[]>([])
@@ -325,10 +335,14 @@ export default function ResultsStep({
   // Drag-and-drop handler
   const onDragEnd = (result: DropResult) => {
     if (!result.destination) return;
-    const reordered = Array.from(orderedColleges);
-    const [removed] = reordered.splice(result.source.index, 1);
-    reordered.splice(result.destination.index, 0, removed);
-    setOrderedColleges(reordered);
+    
+    // Handle dragging from jump-college-list or college-list
+    if (result.source.droppableId === 'jump-college-list' || result.source.droppableId === 'college-list') {
+      const reordered = Array.from(orderedColleges);
+      const [removed] = reordered.splice(result.source.index, 1);
+      reordered.splice(result.destination.index, 0, removed);
+      setOrderedColleges(reordered);
+    }
   };
 
   // Fetch saved college order and notes on mount
@@ -639,6 +653,13 @@ export default function ResultsStep({
     if (colleges.length > 0) fetchAllSources();
   }, [colleges]);
 
+  // Load USPs from CSV for all colleges at once
+  useEffect(() => {
+    if (colleges.length > 0) {
+      loadAllUSPsFromSheet();
+    }
+  }, [colleges]);
+
   // 2. Fetch fit score for each college on mount or when colleges/userProfile change
   useEffect(() => {
     async function fetchAllFitScores() {
@@ -691,15 +712,199 @@ export default function ResultsStep({
   }
 
   // Helper to get the current USP list for a college (reordered or default)
-  function getCurrentUSPs(college: College) {
-    const originalUspLines = usps[college.id] || "";
-    const uspLines = originalUspLines
-      .split(/\n|\r/)
-      .map(line => line.trim())
-      .filter(line => line.startsWith('-'))
-      .map(line => line.replace(/^[-•]\s*/, ''));
-    if (reorderedUSPs[college.id]) return reorderedUSPs[college.id];
-    return uspLines;
+  // Function to get current USPs for a college from CSV or cache
+  function getCurrentUSPs(college: College): string[] {
+    // Check if we have reordered USPs for this college
+    if (reorderedUSPs[college.id]) {
+      return reorderedUSPs[college.id];
+    }
+    
+    // Check if we have cached CSV USPs for this college
+    if (csvUSPs[college.id]) {
+      return csvUSPs[college.id];
+    }
+    
+    // Return placeholder message if not loaded yet
+    return [`Loading USPs for ${college.name}...`];
+  }
+
+  // Function to load USPs from CSV for all colleges once
+  async function loadAllUSPsFromSheet(): Promise<void> {
+    try {
+      console.log(`[USP Debug] Fetching USPs from sheet...`);
+      
+      // Fetch the CSV data from the new sheet with program-specific USPs
+      const csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTr0rMEUltIom1ACFl16G4L_VO9NNfgsMlK3HnQlFyDdQRQ3xHjMVAzvz5SMxsucL0FEUR4yQMVdKBj/pub?output=csv";
+      
+      const response = await fetch(csvUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch CSV: ${response.status}`);
+      }
+      
+      const csvText = await response.text();
+      
+      // Parse CSV manually with better comma handling
+      const lines = csvText.split('\n').filter(line => line.trim());
+      if (lines.length < 2) {
+        throw new Error('CSV has no data');
+      }
+      
+      // Better CSV parsing to handle commas within quoted fields
+      function parseCSVLine(line: string): string[] {
+        const result: string[] = [];
+        let current = '';
+        let inQuotes = false;
+        
+        for (let i = 0; i < line.length; i++) {
+          const char = line[i];
+          
+          if (char === '"') {
+            inQuotes = !inQuotes;
+          } else if (char === ',' && !inQuotes) {
+            result.push(current.trim());
+            current = '';
+          } else {
+            current += char;
+          }
+        }
+        result.push(current.trim());
+        return result;
+      }
+      
+      const headers = parseCSVLine(lines[0]).map(h => h.replace(/^["']|["']$/g, '').trim());
+      console.log('[USP Debug] Sheet headers:', headers);
+      
+      // Define the USP column names to extract
+      const uspColumnNames = [
+        "Get a job",
+        "Get a PR/settle in abroad", 
+        "Return to India",
+        "Research/PhD etc.",
+        "Cost/Budget",
+        "Research opportunities",
+        "Job opportunities/Recruits",
+        "Alum network",
+        "Locations",
+        "Quality of Education"
+      ];
+      
+      // Find college name column (could be "College Name", "University", etc.)
+      let collegeNameColumnIndex = -1;
+      for (let i = 0; i < headers.length; i++) {
+        const header = headers[i].toLowerCase();
+        if (header.includes('college') || header.includes('university') || header.includes('school') || header.includes('name')) {
+          collegeNameColumnIndex = i;
+          break;
+        }
+      }
+      
+      if (collegeNameColumnIndex === -1) {
+        console.error('College name column not found in CSV');
+        return;
+      }
+      
+      console.log(`[USP Debug] College name column found at index: ${collegeNameColumnIndex}`);
+      
+      // Process each college and extract USPs
+      const collegUSPs: { [collegeId: string]: string[] } = {};
+      
+      orderedColleges.forEach(college => {
+        // Find matching row for this college
+        let matchedRow: string[] | null = null;
+        
+        for (let i = 1; i < lines.length; i++) {
+          const cells = parseCSVLine(lines[i]).map(c => c.replace(/^["']|["']$/g, '').trim());
+          
+          if (cells.length <= collegeNameColumnIndex) continue;
+          
+          const csvCollegeName = cells[collegeNameColumnIndex]?.trim().toLowerCase();
+          const targetCollegeName = college.name.toLowerCase();
+          
+          // Try exact match first
+          if (csvCollegeName === targetCollegeName) {
+            matchedRow = cells;
+            console.log(`[USP Debug] Exact college match found for: ${college.name}`);
+            break;
+          }
+          
+          // Try partial matching
+          if (csvCollegeName && targetCollegeName && 
+              (csvCollegeName.includes(targetCollegeName) || targetCollegeName.includes(csvCollegeName))) {
+            matchedRow = cells;
+            console.log(`[USP Debug] Partial college match found for: ${college.name}`);
+            break;
+          }
+        }
+        
+        if (!matchedRow) {
+          console.log(`[USP Debug] No match found for college: ${college.name}`);
+          collegUSPs[college.id] = [`No USPs found for ${college.name}`];
+          return;
+        }
+        
+        // Extract USPs from the specified columns
+        const usps: string[] = [];
+        
+        uspColumnNames.forEach(columnName => {
+          // Try multiple matching strategies for column names
+          let columnIndex = headers.findIndex(h => 
+            h.trim().toLowerCase() === columnName.toLowerCase() ||
+            h.trim() === columnName
+          );
+          
+          // If not found, try partial matching
+          if (columnIndex === -1) {
+            columnIndex = headers.findIndex(h => {
+              const headerLower = h.trim().toLowerCase();
+              const columnLower = columnName.toLowerCase();
+              return headerLower.includes(columnLower) || columnLower.includes(headerLower);
+            });
+          }
+          
+          // If still not found, try without spaces/special chars
+          if (columnIndex === -1) {
+            const cleanColumnName = columnName.replace(/[^a-zA-Z]/g, '').toLowerCase();
+            columnIndex = headers.findIndex(h => {
+              const cleanHeader = h.replace(/[^a-zA-Z]/g, '').toLowerCase();
+              return cleanHeader === cleanColumnName;
+            });
+          }
+          
+          if (columnIndex !== -1 && columnIndex < matchedRow!.length) {
+            const cellValue = matchedRow![columnIndex]?.trim();
+            
+            if (cellValue && cellValue !== '' && cellValue.toLowerCase() !== 'null' && cellValue !== '0' && cellValue !== 'false') {
+              // Clean up the USP text
+              let uspText = cellValue;
+              
+              // Remove quotes if present
+              uspText = uspText.replace(/^["']|["']$/g, '');
+              
+              // Only add if it's meaningful content
+              if (uspText.length > 1 && !usps.includes(uspText)) {
+                usps.push(uspText);
+              }
+            }
+          }
+        });
+        
+        collegUSPs[college.id] = usps.length > 0 ? usps : [`No USPs found for ${college.name}`];
+        console.log(`[USP Debug] USPs for ${college.name}:`, collegUSPs[college.id]);
+      });
+      
+      // Set all USPs at once
+      setCsvUSPs(collegUSPs);
+      console.log(`[USP Debug] All USPs loaded successfully`);
+      
+    } catch (error) {
+      console.error(`[USP Debug] Error fetching USPs from sheet:`, error);
+      // Set error message for all colleges
+      const errorUSPs: { [collegeId: string]: string[] } = {};
+      orderedColleges.forEach(college => {
+        errorUSPs[college.id] = ['Error loading USPs'];
+      });
+      setCsvUSPs(errorUSPs);
+    }
   }
 
   // Handler for manual USP order change
@@ -714,30 +919,30 @@ export default function ResultsStep({
 
   // Handler for deleting a USP
   function handleDeleteUSP(collegeId: string, uspIdx: number) {
-    setReorderedUSPs(prev => {
-      const uspList = getCurrentUSPs(orderedColleges.find(c => c.id === collegeId)!);
-      const deletedUSP = uspList[uspIdx];
-      const updated = uspList.filter((_, idx) => idx !== uspIdx);
-      setDeletedUSPStack(stack => {
-        const prevStack = stack[collegeId] || [];
-        return { ...stack, [collegeId]: [...prevStack, { usp: deletedUSP, index: uspIdx }] };
-      });
-      return { ...prev, [collegeId]: updated };
+    const uspList = getCurrentUSPs(orderedColleges.find(c => c.id === collegeId)!);
+    const deletedUSP = uspList[uspIdx];
+    const updated = uspList.filter((_, idx) => idx !== uspIdx);
+    
+    setDeletedUSPStack(stack => {
+      const prevStack = stack[collegeId] || [];
+      return { ...stack, [collegeId]: [...prevStack, { usp: deletedUSP, index: uspIdx }] };
     });
+    
+    setReorderedUSPs(prev => ({ ...prev, [collegeId]: updated }));
   }
 
   // Handler to restore last deleted USP
   function handleRestoreUSP(collegeId: string) {
-    setReorderedUSPs(prev => {
-      const uspList = getCurrentUSPs(orderedColleges.find(c => c.id === collegeId)!);
-      const stack = deletedUSPStack[collegeId] || [];
-      if (stack.length === 0) return prev;
-      const last = stack[stack.length - 1];
-      const updated = [...uspList];
-      updated.splice(last.index, 0, last.usp);
-      setDeletedUSPStack(s => ({ ...s, [collegeId]: stack.slice(0, -1) }));
-      return { ...prev, [collegeId]: updated };
-    });
+    const uspList = getCurrentUSPs(orderedColleges.find(c => c.id === collegeId)!);
+    const stack = deletedUSPStack[collegeId] || [];
+    if (stack.length === 0) return;
+    
+    const last = stack[stack.length - 1];
+    const updated = [...uspList];
+    updated.splice(last.index, 0, last.usp);
+    
+    setDeletedUSPStack(s => ({ ...s, [collegeId]: stack.slice(0, -1) }));
+    setReorderedUSPs(prev => ({ ...prev, [collegeId]: updated }));
   }
 
   /* ---------------------------------------------------------------- */
@@ -1222,60 +1427,81 @@ export default function ResultsStep({
           </p>
         </div>
 
-        <div className="relative flex">
-          {/* Side navigator on the left */}
-          <div
-            className="hidden lg:flex flex-col items-start"
-            style={{ position: 'sticky', top: '6rem', height: 'fit-content', minWidth: '320px', maxWidth: '380px', marginRight: '1.2rem', marginLeft: '0.2rem', zIndex: 30 }}
-          >
-            <button
-              className="w-full font-extrabold text-blue-800 text-lg tracking-wide drop-shadow-sm uppercase bg-gradient-to-br from-blue-50 via-white to-blue-100 border border-blue-200 rounded-2xl shadow-2xl p-3 mt-2 hover:bg-blue-100 transition text-center"
-              style={{ boxShadow: '0 8px 36px 0 rgba(37,99,235,0.10)', marginLeft: '1vw' }}
-              onClick={() => setJumpOpen(o => !o)}
-              aria-expanded={jumpOpen}
-              aria-controls="jump-college-list"
+        <DragDropContext onDragEnd={onDragEnd}>
+          <div className="relative flex">
+            {/* Side navigator on the left */}
+            <div
+              className="hidden lg:flex flex-col items-start"
+              style={{ position: 'sticky', top: '6rem', height: 'fit-content', minWidth: '320px', maxWidth: '380px', marginRight: '1.2rem', marginLeft: '0.2rem', zIndex: 30 }}
             >
-              Jump to College {jumpOpen ? '▲' : '▼'}
-            </button>
-            {jumpOpen && (
-              <div
-                id="jump-college-list"
-                className="w-[300px] max-w-[360px] max-h-[80vh] overflow-y-auto bg-gradient-to-br from-blue-50 via-white to-blue-100 border border-blue-200 rounded-2xl shadow-2xl p-4 mt-2"
+              <button
+                className="w-full font-extrabold text-blue-800 text-lg tracking-wide drop-shadow-sm uppercase bg-gradient-to-br from-blue-50 via-white to-blue-100 border border-blue-200 rounded-2xl shadow-2xl p-3 mt-2 hover:bg-blue-100 transition text-center"
                 style={{ boxShadow: '0 8px 36px 0 rgba(37,99,235,0.10)', marginLeft: '1vw' }}
+                onClick={() => setJumpOpen(o => !o)}
+                aria-expanded={jumpOpen}
+                aria-controls="jump-college-list"
               >
-                <ul className="space-y-2">
-                  {orderedColleges.map((college, idx) => (
-                    <li key={college.id}>
-                      <button
-                        className="w-full text-left px-4 py-2 rounded-xl hover:bg-blue-100 focus:bg-blue-200 focus:outline-none transition font-semibold text-base text-gray-900 border border-transparent hover:border-blue-300 flex items-start gap-2 shadow-sm whitespace-normal"
-                        onClick={() => {
-                          const el = collegeRefs.current[college.id];
-                          if (el) {
-                            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                          }
-                        }}
-                        title={college.name + (college.courseName ? ` (${college.courseName})` : '')}
-                      >
-                        <span className="text-blue-500 font-bold mr-2" style={{ minWidth: 24, textAlign: 'right' }}>{idx + 1}.</span>
-                        <span className="flex flex-col items-start w-full whitespace-normal">
-                          <span className="font-semibold text-gray-900" style={{ lineHeight: 1.2, wordBreak: 'break-word', whiteSpace: 'normal' }}>{college.name}</span>
-                          <span className="text-blue-700 font-normal text-sm mt-0.5" style={{ lineHeight: 1.1, wordBreak: 'break-word', whiteSpace: 'normal' }}>
-                            {college.courseName ? `(${college.courseName})` : '(Program not specified)'}
-                          </span>
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-          {/* Main college cards list */}
-          <div className="flex-1">
-            <DragDropContext onDragEnd={onDragEnd}>
-              <Droppable droppableId="college-list">
-                {(provided) => (
-                  <div className="grid gap-6" ref={provided.innerRef} {...provided.droppableProps}>
+                Your College Navigator {jumpOpen ? '▲' : '▼'}
+              </button>
+              {jumpOpen && (
+                <div
+                  id="jump-college-list"
+                  className="w-[300px] max-w-[360px] max-h-[80vh] overflow-y-auto bg-gradient-to-br from-blue-50 via-white to-blue-100 border border-blue-200 rounded-2xl shadow-2xl p-4 mt-2"
+                  style={{ boxShadow: '0 8px 36px 0 rgba(37,99,235,0.10)', marginLeft: '1vw' }}
+                >
+                    <Droppable droppableId="jump-college-list">
+                      {(provided) => (
+                        <ul className="space-y-2" ref={provided.innerRef} {...provided.droppableProps}>
+                          {orderedColleges.map((college, idx) => (
+                            <Draggable key={college.id} draggableId={`jump-${college.id}`} index={idx}>
+                              {(dragProvided, snapshot) => (
+                                <li
+                                  ref={dragProvided.innerRef}
+                                  {...dragProvided.draggableProps}
+                                  {...dragProvided.dragHandleProps}
+                                  style={{
+                                    ...dragProvided.draggableProps.style,
+                                    transform: snapshot.isDragging 
+                                      ? dragProvided.draggableProps.style?.transform 
+                                      : "none"
+                                  }}
+                                >
+                                  <div
+                                    className={`w-full text-left px-4 py-2 rounded-xl hover:bg-blue-100 focus:bg-blue-200 focus:outline-none transition font-semibold text-base text-gray-900 border border-transparent hover:border-blue-300 flex items-start gap-2 shadow-sm whitespace-normal cursor-pointer ${snapshot.isDragging ? 'shadow-lg scale-105 z-50 bg-blue-100' : ''} ${college.liked ? 'bg-red-50 border-red-200 shadow-md' : ''}`}
+                                    onClick={(e) => {
+                                      if (!snapshot.isDragging) {
+                                        const el = collegeRefs.current[college.id];
+                                        if (el) {
+                                          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                        }
+                                      }
+                                    }}
+                                    title={college.name + (college.courseName ? ` (${college.courseName})` : '')}
+                                  >
+                                    <span className="text-blue-500 font-bold mr-2" style={{ minWidth: 24, textAlign: 'right' }}>{idx + 1}.</span>
+                                    <span className="flex flex-col items-start w-full whitespace-normal">
+                                      <span className="font-semibold text-gray-900" style={{ lineHeight: 1.2, wordBreak: 'break-word', whiteSpace: 'normal' }}>{college.name}</span>
+                                      <span className="text-blue-700 font-normal text-sm mt-0.5" style={{ lineHeight: 1.1, wordBreak: 'break-word', whiteSpace: 'normal' }}>
+                                        {college.courseName ? `(${college.courseName})` : '(Program not specified)'}
+                                      </span>
+                                    </span>
+                                  </div>
+                                </li>
+                              )}
+                            </Draggable>
+                          ))}
+                          {provided.placeholder}
+                        </ul>
+                      )}
+                    </Droppable>
+                </div>
+              )}
+            </div>
+            {/* Main college cards list */}
+            <div className="flex-1">
+                <Droppable droppableId="college-list">
+                  {(provided) => (
+                    <div className="grid gap-6" ref={provided.innerRef} {...provided.droppableProps}>
                     {orderedColleges.map((college, index) => {
                       const isSelected = college.liked
                       const details = getCollegeDetails(college)
@@ -1310,7 +1536,7 @@ export default function ResultsStep({
                                     ...getPriorityStyle(index)  // This line is crucial
                                   }}
                                 >
-                                  {`${index + 1}${index === 0 ? 'st' : index === 1 ? 'nd' : index === 2 ? 'rd' : 'th'} College`}
+                                  {index < 3 ? `Best match ${index + 1}` : `Match ${index + 1}`}
                                 </div>
                                 {/* Left/Main Section */}
                                 <div className="flex-1 min-w-0">
@@ -1350,22 +1576,13 @@ export default function ResultsStep({
                                               if (!fee || isTuitionFeeInvalid(fee)) fee = "8.0";
                                               const num = parseFloat(String(fee).replace(/[^\d.]/g, ""));
                                               if (isNaN(num)) return "N/A";
-                                              const lakhs = (num / 100000).toFixed(2);
+                                              const lakhs = Math.round(num / 100000);
                                               return `₹${lakhs}L`;
                                             })()}
                                           </div>
                                         </div>
                                         {/* Action buttons inline with name and badges */}
                                         <div className="flex flex-row gap-2 items-center ml-2">
-                                          <Button
-                                            variant="outline"
-                                            size="sm"
-                                            className="hover:bg-blue-50 hover:border-blue-300 transition-all duration-300 bg-transparent flex items-center"
-                                            onClick={() => handleViewDetails(college)}
-                                          >
-                                            <Eye className="w-4 h-4 mr-1 align-middle" />
-                                            View Details
-                                          </Button>
                                           <Button
                                             onClick={() => onCollegeToggle(college.id)}
                                             variant={isSelected ? "default" : "outline"}
@@ -1391,6 +1608,15 @@ export default function ResultsStep({
                                             title="Select for comparison"
                                           >
                                             Compare
+                                          </Button>
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="hover:bg-blue-50 hover:border-blue-300 transition-all duration-300 bg-transparent flex items-center"
+                                            onClick={() => handleViewDetails(college)}
+                                          >
+                                            <Eye className="w-4 h-4 mr-1 align-middle" />
+                                            Know More
                                           </Button>
                                         </div>
                                       </div>
@@ -1537,9 +1763,9 @@ export default function ResultsStep({
                   </div>
                 )}
               </Droppable>
-            </DragDropContext>
+            </div>
           </div>
-        </div>
+        </DragDropContext>
 
         {/* Details Dialog */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
